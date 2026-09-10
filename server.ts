@@ -142,6 +142,68 @@ app.get('/api/events', (req, res) => {
   });
 });
 
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', time: new Date().toISOString() });
+});
+
+// Proxy endpoint to read Google Sheets CSV without CORS or auth issues
+app.get('/api/sheets/read', async (req, res) => {
+  try {
+    const id = req.query.id as string;
+    const sheet = (req.query.sheet as string) || '';
+    if (!id) {
+      return res.status(400).json({ error: 'Spreadsheet ID atau URL diperlukan' });
+    }
+
+    const cleanId = id.trim().replace(/^.*\/d\/([a-zA-Z0-9-_]+).*$/, '$1');
+    const url = sheet
+      ? `https://docs.google.com/spreadsheets/d/${encodeURIComponent(cleanId)}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheet)}`
+      : `https://docs.google.com/spreadsheets/d/${encodeURIComponent(cleanId)}/gviz/tq?tqx=out:csv`;
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      return res.status(response.status).json({
+        error: `Gagal membaca sheet dari Google (${response.status} ${response.statusText}). Pastikan hak akses spreadsheet diatur: "Siapa saja yang memiliki link dapat melihat".`
+      });
+    }
+
+    const csvText = await response.text();
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.send(csvText);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Server error saat membaca Google Sheets' });
+  }
+});
+
+// Proxy endpoint to forward data to Google Apps Script Webhook
+app.post('/api/sheets/webhook-proxy', async (req, res) => {
+  try {
+    const { webhookUrl, payload } = req.body;
+    if (!webhookUrl) {
+      return res.status(400).json({ error: 'Webhook URL diperlukan' });
+    }
+
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const text = await response.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { raw: text };
+    }
+
+    res.json({ success: response.ok, status: response.status, data });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Gagal mengirim data ke Webhook Google Apps Script' });
+  }
+});
+
 // REST API endpoint to query state
 app.get('/api/state', (req, res) => {
   const reqArena = (req.query.arena as string) || 'arena_1';

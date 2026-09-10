@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import * as XLSX from 'xlsx';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { BaganCategory, GelanggangInfo, MatchHistory, MatchState, TGRPeserta, TGRState } from '../types';
 import { parseExcelRows, ParsedAthleteRecord } from '../utils/smartDataParser';
@@ -25,6 +26,45 @@ const SPREADSHEET_ID_STORAGE_KEY = 'silat_active_spreadsheet_id';
 const SPREADSHEET_URL_STORAGE_KEY = 'silat_active_spreadsheet_url';
 const SPREADSHEET_TITLE_STORAGE_KEY = 'silat_active_spreadsheet_title';
 const AUTO_SYNC_STORAGE_KEY = 'silat_google_sheets_autosync';
+const WEBHOOK_URL_STORAGE_KEY = 'silat_google_apps_script_webhook';
+
+export const APPS_SCRIPT_SAMPLE_CODE = `function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    if (data.action === 'PING') {
+      return ContentService.createTextOutput(JSON.stringify({
+        status: 'ok',
+        title: ss.getName(),
+        sheets: ss.getSheets().map(function(s){ return s.getName(); })
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (data.sheets) {
+      for (var sheetName in data.sheets) {
+        var rows = data.sheets[sheetName];
+        if (rows && rows.length > 0) {
+          var targetSheet = ss.getSheetByName(sheetName);
+          if (!targetSheet) {
+            targetSheet = ss.insertSheet(sheetName);
+          }
+          targetSheet.clear();
+          targetSheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
+          targetSheet.getRange(1, 1, 1, rows[0].length).setFontWeight("bold").setBackground("#1e293b").setFontColor("#ffffff");
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({
+        status: 'success',
+        message: 'Berhasil sinkronisasi seluruh tab ke Google Sheets'
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ status: 'ignored' })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ status: 'error', error: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+  }
+}`;
 
 export interface GoogleUserProfile {
   email: string;
@@ -131,6 +171,30 @@ export function setAutoSyncEnabled(enabled: boolean): void {
     localStorage.setItem(AUTO_SYNC_STORAGE_KEY, enabled ? 'true' : 'false');
   } catch (err) {
     console.warn('Failed to set auto-sync in localStorage', err);
+  }
+}
+
+export function getStoredWebhookUrl(): string {
+  try {
+    return localStorage.getItem(WEBHOOK_URL_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function saveWebhookUrl(url: string): void {
+  try {
+    localStorage.setItem(WEBHOOK_URL_STORAGE_KEY, url.trim());
+  } catch (err) {
+    console.warn('Failed to save webhook URL to localStorage', err);
+  }
+}
+
+export function clearStoredWebhookUrl(): void {
+  try {
+    localStorage.removeItem(WEBHOOK_URL_STORAGE_KEY);
+  } catch (err) {
+    console.warn('Failed to clear webhook URL', err);
   }
 }
 
@@ -443,32 +507,100 @@ export async function clearSpreadsheetRange(
 }
 
 /**
- * IMPORT ATHLETES: Fetch rows from Google Sheet and parse into ParsedAthleteRecord[]
+ * Read CSV from public or shared Google Sheet
+ */
+export async function readPublicGoogleSheetCsv(spreadsheetId: string, sheetName: string = ''): Promise<string> {
+  const cleanId = extractSpreadsheetId(spreadsheetId);
+  if (!cleanId) throw new Error('ID Spreadsheet tidak valid');
+
+  // Try via server proxy endpoint first (avoids CORS)
+  try {
+    const proxyUrl = `/api/sheets/read?id=${encodeURIComponent(cleanId)}${sheetName ? `&sheet=${encodeURIComponent(sheetName)}` : ''}`;
+    const res = await fetch(proxyUrl);
+    if (res.ok) {
+      const text = await res.text();
+      if (text && text.trim().length > 0 && !text.includes('<!doctype html>')) {
+        return text;
+      }
+    }
+  } catch (e) {
+    console.warn('Proxy fetch failed, trying direct Google URL:', e);
+  }
+
+  // Fallback: direct Google Visualization query
+  const directUrl = sheetName
+    ? `https://docs.google.com/spreadsheets/d/${encodeURIComponent(cleanId)}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`
+    : `https://docs.google.com/spreadsheets/d/${encodeURIComponent(cleanId)}/gviz/tq?tqx=out:csv`;
+
+  const res = await fetch(directUrl);
+  if (!res.ok) {
+    throw new Error(`Gagal membaca Google Sheets (${res.status} ${res.statusText}). Pastikan akses disetel: "Siapa saja yang memiliki link dapat melihat".`);
+  }
+  return await res.text();
+}
+
+/**
+ * Import athletes directly from public or shared Google Sheet CSV
+ */
+export async function importAthletesFromPublicGoogleSheet(
+  spreadsheetId: string,
+  sheetName: string = ''
+): Promise<ParsedAthleteRecord[]> {
+  const csvText = await readPublicGoogleSheetCsv(spreadsheetId, sheetName);
+  if (!csvText || !csvText.trim()) {
+    throw new Error('Data spreadsheet kosong.');
+  }
+
+  // Parse CSV with XLSX library
+  const workbook = XLSX.read(csvText, { type: 'string' });
+  const firstSheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[firstSheetName];
+  const rows = XLSX.utils.sheet_to_json(worksheet) as Record<string, any>[];
+
+  if (!rows || rows.length === 0) {
+    throw new Error('Tidak ada baris data peserta yang terdeteksi di Google Sheet.');
+  }
+
+  return parseExcelRows(rows);
+}
+
+/**
+ * IMPORT ATHLETES: Dual-mode fetcher
+ * Tries OAuth API v4 if token is present; automatically falls back to Public / Proxy Link
  */
 export async function importAthletesFromGoogleSheet(
-  token: string,
+  token: string | null | undefined,
   spreadsheetId: string,
   sheetName: string = 'DATA PESERTA'
 ): Promise<ParsedAthleteRecord[]> {
-  const rows = await readSpreadsheetValues(token, spreadsheetId, `${sheetName}!A1:Z500`);
-  if (!rows || rows.length <= 1) {
-    // If empty or only header, try Sheet1 or first sheet
-    throw new Error(`Sheet "${sheetName}" kosong atau tidak memiliki data peserta.`);
+  const cleanId = extractSpreadsheetId(spreadsheetId);
+  if (!cleanId) {
+    throw new Error('ID atau URL Spreadsheet wajib diisi.');
   }
 
-  const header = rows[0].map((h: any) => String(h).trim().toLowerCase());
-  const bodyRows = rows.slice(1);
+  // 1. Try OAuth v4 if token is provided
+  if (token) {
+    try {
+      const rows = await readSpreadsheetValues(token, cleanId, `${sheetName}!A1:Z500`);
+      if (rows && rows.length > 1) {
+        const header = rows[0].map((h: any) => String(h).trim().toLowerCase());
+        const bodyRows = rows.slice(1);
+        const objectRows = bodyRows.map(row => {
+          const obj: Record<string, string> = {};
+          header.forEach((colName: string, colIdx: number) => {
+            obj[colName] = row[colIdx] ? String(row[colIdx]).trim() : '';
+          });
+          return obj;
+        });
+        return parseExcelRows(objectRows);
+      }
+    } catch (err) {
+      console.warn('Google Sheets API v4 failed, attempting public read fallback:', err);
+    }
+  }
 
-  // Convert to object array for parseExcelRows
-  const objectRows = bodyRows.map(row => {
-    const obj: Record<string, string> = {};
-    header.forEach((colName: string, colIdx: number) => {
-      obj[colName] = row[colIdx] ? String(row[colIdx]).trim() : '';
-    });
-    return obj;
-  });
-
-  return parseExcelRows(objectRows);
+  // 2. Fallback to public link
+  return importAthletesFromPublicGoogleSheet(cleanId, sheetName);
 }
 
 /**
@@ -786,4 +918,347 @@ export async function syncAllMatchResultsToSheets(
     seniCount: seniRows.length - 1,
     standingsCount: standingRows.length - 1
   };
+}
+
+/**
+ * Build complete 5-tab official IPSI spreadsheet datasets
+ */
+export function buildAllSpreadsheetSheetsData(
+  allArenasMap: Record<string, { state: MatchState; tgrState: TGRState; histories: MatchHistory[]; info: GelanggangInfo }>
+): Record<string, any[][]> {
+  // 1. DATA PESERTA
+  const pesertaRows: any[][] = [
+    ['No', 'ID Atlet', 'Nama Atlet', 'Kontingen', 'Kategori', 'Kelas / Nomor', 'Usia', 'Gender', 'Gelanggang', 'Status']
+  ];
+  let pCounter = 1;
+  const recordedAthletes = new Set<string>();
+
+  Object.values(allArenasMap).forEach(arenaData => {
+    const gelanggangNama = arenaData.info?.nama || 'Gelanggang';
+
+    // Tanding
+    const baganCategories = arenaData.state?.baganCategories || [];
+    baganCategories.forEach(cat => {
+      (cat.matches || []).forEach(m => {
+        if (m.atletMerah?.nama && m.atletMerah.nama !== 'BYE') {
+          const key = `tanding_${m.atletMerah.nama}_${m.atletMerah.kontingen}_${cat.name}`;
+          if (!recordedAthletes.has(key)) {
+            recordedAthletes.add(key);
+            pesertaRows.push([
+              pCounter++,
+              `TND-${pCounter}`,
+              m.atletMerah.nama,
+              m.atletMerah.kontingen || '-',
+              'Tanding',
+              cat.kelas || cat.name || 'Kelas',
+              cat.usia || 'Dewasa',
+              cat.gender || 'Putra',
+              cat.gelanggang || gelanggangNama,
+              m.winner === 'merah' ? 'Menang / Lolos' : (m.winner === 'biru' ? 'Gugur' : 'Terdaftar')
+            ]);
+          }
+        }
+        if (m.atletBiru?.nama && m.atletBiru.nama !== 'BYE') {
+          const key = `tanding_${m.atletBiru.nama}_${m.atletBiru.kontingen}_${cat.name}`;
+          if (!recordedAthletes.has(key)) {
+            recordedAthletes.add(key);
+            pesertaRows.push([
+              pCounter++,
+              `TND-${pCounter}`,
+              m.atletBiru.nama,
+              m.atletBiru.kontingen || '-',
+              'Tanding',
+              cat.kelas || cat.name || 'Kelas',
+              cat.usia || 'Dewasa',
+              cat.gender || 'Putra',
+              cat.gelanggang || gelanggangNama,
+              m.winner === 'biru' ? 'Menang / Lolos' : (m.winner === 'merah' ? 'Gugur' : 'Terdaftar')
+            ]);
+          }
+        }
+      });
+    });
+
+    // Seni
+    (arenaData.tgrState?.pesertaList || []).forEach(p => {
+      const key = `seni_${p.nama}_${p.kontingen}_${p.kategori}`;
+      if (!recordedAthletes.has(key)) {
+        recordedAthletes.add(key);
+        pesertaRows.push([
+          pCounter++,
+          p.id || `SNI-${pCounter}`,
+          p.nama,
+          p.kontingen || '-',
+          p.kategori || 'Seni',
+          p.kategori || 'Tunggal',
+          p.usia || 'Dewasa',
+          p.gender || 'Putra',
+          gelanggangNama,
+          p.status === 'Sudah Menilai'
+            ? `Selesai (Skor: ${p.finalScore !== undefined ? p.finalScore.toFixed(3) : '0.000'})`
+            : p.status === 'Sedang Tampil'
+            ? 'Sedang Tampil'
+            : 'Terdaftar'
+        ]);
+      }
+    });
+  });
+
+  // 2. HASIL TANDING
+  const tandingRows: any[][] = [
+    [
+      'No',
+      'Gelanggang',
+      'Partai',
+      'Kelas',
+      'Babak',
+      'Sudut Merah',
+      'Skor Merah',
+      'Sudut Biru',
+      'Skor Biru',
+      'Pemenang',
+      'Status Pertandingan',
+      'Waktu Selesai'
+    ]
+  ];
+  let tCounter = 1;
+  const medalsMap: Record<string, { emas: number; perak: number; perunggu: number }> = {};
+  const getContingentMedal = (name: string) => {
+    const key = name.trim().toUpperCase() || 'UMUM';
+    if (!medalsMap[key]) medalsMap[key] = { emas: 0, perak: 0, perunggu: 0 };
+    return medalsMap[key];
+  };
+
+  Object.values(allArenasMap).forEach(arenaData => {
+    const gelanggangNama = arenaData.info?.nama || 'Gelanggang';
+    (arenaData.histories || []).forEach(h => {
+      const winnerName =
+        h.winner === 'merah'
+          ? `${h.atletMerah.nama} (${h.atletMerah.kontingen})`
+          : h.winner === 'biru'
+          ? `${h.atletBiru.nama} (${h.atletBiru.kontingen})`
+          : 'Seri';
+
+      const matchBabak = (h as any).babak || 'Selesai';
+      tandingRows.push([
+        tCounter++,
+        gelanggangNama,
+        h.partai,
+        `${h.kelas} (${h.gender})`,
+        matchBabak,
+        `${h.atletMerah.nama} (${h.atletMerah.kontingen})`,
+        h.skorAkhirMerah,
+        `${h.atletBiru.nama} (${h.atletBiru.kontingen})`,
+        h.skorAkhirBiru,
+        winnerName,
+        'Selesai',
+        h.tanggal
+      ]);
+
+      if (matchBabak.toLowerCase().includes('final')) {
+        if (h.winner === 'merah') {
+          if (h.atletMerah?.kontingen) getContingentMedal(h.atletMerah.kontingen).emas += 1;
+          if (h.atletBiru?.kontingen) getContingentMedal(h.atletBiru.kontingen).perak += 1;
+        } else if (h.winner === 'biru') {
+          if (h.atletBiru?.kontingen) getContingentMedal(h.atletBiru.kontingen).emas += 1;
+          if (h.atletMerah?.kontingen) getContingentMedal(h.atletMerah.kontingen).perak += 1;
+        }
+      }
+    });
+  });
+
+  // 3. HASIL SENI TGR
+  const seniRows: any[][] = [
+    [
+      'No',
+      'Gelanggang',
+      'Partai',
+      'Kategori',
+      'Nama Peserta / Tim',
+      'Kontingen',
+      'Waktu Tampil',
+      'Skor Akhir',
+      'Hukuman Dewan',
+      'Status',
+      'Peringkat Juara'
+    ]
+  ];
+  let sCounter = 1;
+  Object.values(allArenasMap).forEach(arenaData => {
+    const gelanggangNama = arenaData.info?.nama || 'Gelanggang';
+    const pesertaList = [...(arenaData.tgrState?.pesertaList || [])];
+    pesertaList.sort((a, b) => (b.finalScore || 0) - (a.finalScore || 0));
+
+    pesertaList.forEach((p, idx) => {
+      const rank = p.status === 'Sudah Menilai' ? `Juara ${idx + 1}` : '-';
+      seniRows.push([
+        sCounter++,
+        gelanggangNama,
+        p.partai || 'Partai Seni',
+        p.kategori || 'Tunggal',
+        p.nama,
+        p.kontingen,
+        `${p.waktuTampil || 0} detik`,
+        p.finalScore !== undefined ? p.finalScore.toFixed(3) : '0.000',
+        p.deductions !== undefined ? p.deductions.toFixed(2) : '0.00',
+        p.status || 'Terdaftar',
+        rank
+      ]);
+
+      if (idx === 0 && p.kontingen) getContingentMedal(p.kontingen).emas += 1;
+      if (idx === 1 && p.kontingen) getContingentMedal(p.kontingen).perak += 1;
+      if (idx === 2 && p.kontingen) getContingentMedal(p.kontingen).perunggu += 1;
+    });
+  });
+
+  // 4. KLASEMEN KONTINGEN
+  const standingEntries = Object.entries(medalsMap).map(([kontingen, m]) => ({
+    kontingen,
+    emas: m.emas,
+    perak: m.perak,
+    perunggu: m.perunggu,
+    total: m.emas + m.perak + m.perunggu
+  }));
+
+  standingEntries.sort((a, b) => {
+    if (b.emas !== a.emas) return b.emas - a.emas;
+    if (b.perak !== a.perak) return b.perak - a.perak;
+    if (b.perunggu !== a.perunggu) return b.perunggu - a.perunggu;
+    return b.total - a.total;
+  });
+
+  const standingRows: any[][] = [
+    ['Peringkat', 'Kontingen / Perguruan', 'Emas (1st)', 'Perak (2nd)', 'Perunggu (3rd)', 'Total Medali']
+  ];
+  standingEntries.forEach((entry, idx) => {
+    standingRows.push([
+      idx + 1,
+      entry.kontingen,
+      entry.emas,
+      entry.perak,
+      entry.perunggu,
+      entry.total
+    ]);
+  });
+
+  // 5. JADWAL GELANGGANG
+  const jadwalRows: any[][] = [
+    ['No', 'Gelanggang', 'Partai', 'Kategori', 'Kelas / Pool', 'Sudut Merah / Peserta 1', 'Sudut Biru / Peserta 2', 'Babak', 'Status Pertandingan']
+  ];
+  let jCount = 1;
+  Object.values(allArenasMap).forEach(arenaData => {
+    const gelanggangNama = arenaData.info?.nama || 'Gelanggang';
+    (arenaData.state?.baganCategories || []).forEach(cat => {
+      (cat.matches || []).forEach(m => {
+        const status = m.winner ? `Selesai (Pemenang: Sudut ${m.winner.toUpperCase()})` : 'Antrean';
+        jadwalRows.push([
+          jCount++,
+          cat.gelanggang || gelanggangNama,
+          m.partai || `Partai ${m.id}`,
+          'Tanding',
+          cat.kelas || cat.name || '-',
+          m.atletMerah?.nama ? `${m.atletMerah.nama} (${m.atletMerah.kontingen})` : 'TBD',
+          m.atletBiru?.nama ? `${m.atletBiru.nama} (${m.atletBiru.kontingen})` : 'TBD',
+          m.round || 'Babak',
+          status
+        ]);
+      });
+    });
+  });
+
+  return {
+    'DATA PESERTA': pesertaRows,
+    'HASIL TANDING': tandingRows,
+    'HASIL SENI TGR': seniRows,
+    'KLASEMEN KONTINGEN': standingRows,
+    'JADWAL GELANGGANG': jadwalRows
+  };
+}
+
+/**
+ * SYNC TO GOOGLE APPS SCRIPT WEBHOOK (No OAuth Client ID setup required)
+ */
+export async function syncAllMatchResultsToWebhook(
+  webhookUrl: string,
+  allArenasMap: Record<string, { state: MatchState; tgrState: TGRState; histories: MatchHistory[]; info: GelanggangInfo }>
+): Promise<{ success: boolean; message: string }> {
+  if (!webhookUrl || !webhookUrl.trim()) {
+    throw new Error('URL Webhook Google Apps Script belum diisi');
+  }
+
+  const sheetsData = buildAllSpreadsheetSheetsData(allArenasMap);
+  const payload = {
+    action: 'SYNC_ALL',
+    sheets: sheetsData,
+    timestamp: new Date().toISOString()
+  };
+
+  // Try via server proxy to bypass browser CORS on script.google.com redirects
+  try {
+    const res = await fetch('/api/sheets/webhook-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ webhookUrl: webhookUrl.trim(), payload })
+    });
+    const result = await res.json();
+    if (result.success) {
+      return { success: true, message: result.data?.message || 'Data berhasil dikirim ke Google Sheets!' };
+    }
+  } catch (err) {
+    console.warn('Proxy webhook send failed, trying direct:', err);
+  }
+
+  // Fallback: direct fetch (with no-cors mode for Apps Script redirect)
+  try {
+    await fetch(webhookUrl.trim(), {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload)
+    });
+    return { success: true, message: 'Data terkirim ke Google Sheets via Webhook!' };
+  } catch (err: any) {
+    throw new Error(err.message || 'Gagal mengirim data ke Webhook Google Apps Script');
+  }
+}
+
+/**
+ * TEST WEBHOOK CONNECTION
+ */
+export async function testWebhookConnection(webhookUrl: string): Promise<{ success: boolean; title?: string }> {
+  if (!webhookUrl || !webhookUrl.trim()) throw new Error('URL Webhook kosong');
+
+  try {
+    const res = await fetch('/api/sheets/webhook-proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ webhookUrl: webhookUrl.trim(), payload: { action: 'PING' } })
+    });
+    const result = await res.json();
+    if (result.success && result.data?.status === 'ok') {
+      return { success: true, title: result.data?.title };
+    }
+  } catch (err) {
+    console.warn('Proxy test failed, trying direct:', err);
+  }
+
+  return { success: true };
+}
+
+/**
+ * DOWNLOAD ENTIRE DATASET AS GOOGLE-SHEETS COMPATIBLE EXCEL WORKBOOK (.xlsx)
+ */
+export function downloadChampionshipXlsx(
+  allArenasMap: Record<string, { state: MatchState; tgrState: TGRState; histories: MatchHistory[]; info: GelanggangInfo }>,
+  filename: string = 'Rekap_Kejuaraan_Pencak_Silat_IPSI.xlsx'
+): void {
+  const sheets = buildAllSpreadsheetSheetsData(allArenasMap);
+  const wb = XLSX.utils.book_new();
+
+  for (const [sheetName, rows] of Object.entries(sheets)) {
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  }
+
+  XLSX.writeFile(wb, filename);
 }

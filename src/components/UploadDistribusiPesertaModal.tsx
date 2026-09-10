@@ -181,7 +181,7 @@ export default function UploadDistribusiPesertaModal({
     const token = getStoredGoogleToken();
     const spreadsheetId = getActiveSpreadsheetId();
 
-    if (!token || !spreadsheetId) {
+    if (!spreadsheetId) {
       setShowSheetsModal(true);
       return;
     }
@@ -195,11 +195,12 @@ export default function UploadDistribusiPesertaModal({
         setFileName(`Google Sheets (${records.length} Atlet)`);
         playBeep('valid');
       } else {
-        setErrorMsg('Tab "DATA PESERTA" pada Google Sheets masih kosong atau tidak memiliki baris atlet yang valid.');
+        setErrorMsg('Data pada Google Sheets masih kosong atau tidak memiliki baris atlet yang valid.');
+        setShowSheetsModal(true);
       }
     } catch (err: any) {
       console.error('Failed to import from Google Sheets:', err);
-      setErrorMsg(`Gagal mengambil data dari Google Sheets: ${err.message || 'Periksa koneksi akun Google.'}`);
+      setErrorMsg(`Gagal mengambil data dari Google Sheets: ${err.message || 'Periksa izin akses spreadsheet.'}`);
       setShowSheetsModal(true);
     } finally {
       setIsLoading(false);
