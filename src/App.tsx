@@ -19,13 +19,26 @@ import TGRDewanPanel from './components/TGRDewanPanel';
 import TGRJuriPanel from './components/TGRJuriPanel';
 import TGRSekretarisPanel from './components/TGRSekretarisPanel';
 import TGRMonitorPanel from './components/TGRMonitorPanel';
+import TGRRegistrasiDataPanel from './components/TGRRegistrasiDataPanel';
+import RegistrasiDataPanel from './components/RegistrasiDataPanel';
 
 import PanelPortal from './components/PanelPortal';
 import LandscapeWrapper from './components/LandscapeWrapper';
 import { playBeep } from './utils/sound';
 
 export default function App() {
-  const { state, histories, connected, dispatch, tgrState } = useSyncState();
+  const {
+    state,
+    histories,
+    connected,
+    dispatch,
+    tgrState,
+    currentArenaId,
+    selectArena,
+    arenasList,
+    allArenasSummary,
+    allArenasMap
+  } = useSyncState();
 
   // Mode: 'portal' | 'tanding' | 'seni'
   const [activeMode, setActiveMode] = useState<'portal' | 'tanding' | 'seni'>(() => {
@@ -65,7 +78,7 @@ export default function App() {
     localStorage.setItem('theme', newTheme);
   };
 
-  const handleSelectMode = (mode: 'tanding' | 'seni' | 'monitor_urutan') => {
+  const handleSelectMode = (mode: 'tanding' | 'seni' | 'monitor_urutan', targetRole?: string) => {
     const params = new URLSearchParams(window.location.search);
     if (mode === 'monitor_urutan') {
       params.set('mode', 'tanding');
@@ -75,11 +88,12 @@ export default function App() {
       setActiveRole('monitor_urutan');
       return;
     }
+    const roleToSet = targetRole || 'landing';
     params.set('mode', mode);
-    params.set('role', 'landing');
+    params.set('role', roleToSet);
     window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
     setActiveMode(mode);
-    setActiveRole('landing');
+    setActiveRole(roleToSet);
   };
 
   const handleSelectRole = (role: string) => {
@@ -150,6 +164,12 @@ export default function App() {
         histories={histories}
         tgrState={tgrState}
         state={state}
+        dispatch={dispatch}
+        currentArenaId={currentArenaId}
+        onSelectArena={selectArena}
+        arenasList={arenasList}
+        allArenasSummary={allArenasSummary}
+        allArenasMap={allArenasMap}
       />
     );
   }
@@ -165,6 +185,11 @@ export default function App() {
             theme={theme}
             tgrState={tgrState}
             histories={histories}
+            currentArenaId={currentArenaId}
+            onSelectArena={selectArena}
+            arenasList={arenasList}
+            allArenasSummary={allArenasSummary}
+            allArenasMap={allArenasMap}
           />
         );
 
@@ -210,6 +235,7 @@ export default function App() {
           <LandscapeWrapper>
             <TGRMonitorPanel
               state={tgrState}
+              dispatch={dispatch}
               onBack={handleBackToHome}
               theme={theme}
             />
@@ -227,6 +253,22 @@ export default function App() {
             onBack={handleBackToHome}
             theme={theme}
             onToggleTheme={handleToggleTheme}
+            currentArenaId={currentArenaId}
+            onSelectArena={selectArena}
+            arenasList={arenasList}
+            allArenasSummary={allArenasSummary}
+            allArenasMap={allArenasMap}
+          />
+        );
+
+      case 'registrasi':
+      case 'registrasi_seni':
+        return (
+          <TGRRegistrasiDataPanel
+            theme={theme}
+            state={tgrState}
+            dispatch={dispatch}
+            onClose={handleBackToHome}
           />
         );
 
@@ -252,6 +294,11 @@ export default function App() {
             theme={theme}
             tgrState={tgrState}
             histories={histories}
+            currentArenaId={currentArenaId}
+            onSelectArena={selectArena}
+            arenasList={arenasList}
+            allArenasSummary={allArenasSummary}
+            allArenasMap={allArenasMap}
           />
         );
     }
@@ -268,6 +315,11 @@ export default function App() {
           onToggleTheme={handleToggleTheme}
           histories={histories}
           state={state}
+          currentArenaId={currentArenaId}
+          onSelectArena={selectArena}
+          arenasList={arenasList}
+          allArenasSummary={allArenasSummary}
+          allArenasMap={allArenasMap}
         />
       );
     
@@ -302,7 +354,7 @@ export default function App() {
     case 'sekretaris':
       return (
         <LandscapeWrapper>
-          <SekretarisPanel state={state} histories={histories} dispatch={dispatch} onBack={handleBackToHome} theme={theme} onToggleTheme={handleToggleTheme} />
+          <SekretarisPanel state={state} tgrState={tgrState} histories={histories} dispatch={dispatch} onBack={handleBackToHome} theme={theme} onToggleTheme={handleToggleTheme} />
         </LandscapeWrapper>
       );
 
@@ -324,6 +376,22 @@ export default function App() {
           onBack={handleBackToHome}
           theme={theme}
           onToggleTheme={handleToggleTheme}
+          currentArenaId={currentArenaId}
+          onSelectArena={selectArena}
+          arenasList={arenasList}
+          allArenasSummary={allArenasSummary}
+          allArenasMap={allArenasMap}
+        />
+      );
+
+    case 'registrasi':
+    case 'registrasi_tanding':
+      return (
+        <RegistrasiDataPanel
+          theme={theme}
+          state={state}
+          dispatch={dispatch}
+          onClose={handleBackToHome}
         />
       );
 
@@ -336,6 +404,11 @@ export default function App() {
           onToggleTheme={handleToggleTheme}
           histories={histories}
           state={state}
+          currentArenaId={currentArenaId}
+          onSelectArena={selectArena}
+          arenasList={arenasList}
+          allArenasSummary={allArenasSummary}
+          allArenasMap={allArenasMap}
         />
       );
   }

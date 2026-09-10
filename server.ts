@@ -7,6 +7,19 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { MatchState, MatchHistory, JuriHit, ScoreBreakdown, DewanPenaltyCorner, BaganCategory, BaganMatch, TGRState, TGRPeserta } from './src/types';
+import {
+  arenasMap,
+  getArena,
+  getArenasList,
+  getArenasSummary,
+  createDefaultArena,
+  createInitialMatchState,
+  createInitialTGRState,
+  recalculateArenaScores,
+  recalculateArenaTGRScores,
+  determineArenaWinner,
+  updateArenaBaganWinner
+} from './server/arenas';
 
 const app = express();
 const PORT = 3000;
@@ -14,641 +27,84 @@ const PORT = 3000;
 // Enable JSON parse parsing
 app.use(express.json({ limit: '10mb' }));
 
-// Historical matches database in-memory
-let matchHistories: MatchHistory[] = [
-  {
-    id: "hist_01",
-    namaEvent: "Kejuaraan Pencak Silat Nasional",
-    partai: "Partai 01",
-    kelas: "Kelas A",
-    gender: "Putra",
-    atletMerah: { nama: "Fajar Ramadhan", kontingen: "Banten" },
-    atletBiru: { nama: "Galang Perkasa", kontingen: "Sumatra Barat" },
-    winner: "merah",
-    skorAkhirMerah: 28,
-    skorAkhirBiru: 19,
-    tanggal: new Date(Date.now() - 7200000).toISOString()
-  },
-  {
-    id: "hist_02",
-    namaEvent: "Kejuaraan Pencak Silat Nasional",
-    partai: "Partai 02",
-    kelas: "Kelas B",
-    gender: "Putra",
-    atletMerah: { nama: "Budi Santoso", kontingen: "Jawa Timur" },
-    atletBiru: { nama: "Made Wirawan", kontingen: "Bali" },
-    winner: "biru",
-    skorAkhirMerah: 15,
-    skorAkhirBiru: 22,
-    tanggal: new Date(Date.now() - 3600000).toISOString()
-  }
-];
-
-// Default tournament bracket database
-const defaultBaganData: BaganCategory[] = [
-  {
-    id: "cat_1",
-    name: "Kelas A Putra (45 - 50 kg)",
-    gender: "Putra",
-    size: 4,
-    matches: [
-      {
-        id: 1,
-        round: "semi",
-        partai: "Partai 01",
-        atletMerah: { nama: "Fajar Ramadhan", kontingen: "Banten" },
-        atletBiru: { nama: "Galang Perkasa", kontingen: "Sumatra Barat" },
-        winner: null
-      },
-      {
-        id: 2,
-        round: "semi",
-        partai: "Partai 02",
-        atletMerah: { nama: "Andi Wijaya", kontingen: "DKI Jakarta" },
-        atletBiru: { nama: "Rian Hidayat", kontingen: "Jawa Barat" },
-        winner: null
-      },
-      {
-        id: 3,
-        round: "final",
-        partai: "Partai 05",
-        atletMerah: { nama: "", kontingen: "" },
-        atletBiru: { nama: "", kontingen: "" },
-        winner: null
-      }
-    ]
-  },
-  {
-    id: "cat_2",
-    name: "Kelas B Putra (50 - 55 kg)",
-    gender: "Putra",
-    size: 8,
-    matches: [
-      {
-        id: 1,
-        round: "quarter",
-        partai: "Partai 03",
-        atletMerah: { nama: "Budi Santoso", kontingen: "Jawa Timur" },
-        atletBiru: { nama: "Made Wirawan", kontingen: "Bali" },
-        winner: null
-      },
-      {
-        id: 2,
-        round: "quarter",
-        partai: "Partai 04",
-        atletMerah: { nama: "Hendra Wijaya", kontingen: "Jawa Tengah" },
-        atletBiru: { nama: "Zulfikar", kontingen: "DI Yogyakarta" },
-        winner: null
-      },
-      {
-        id: 3,
-        round: "quarter",
-        partai: "Partai 06",
-        atletMerah: { nama: "Ahmad Fauzi", kontingen: "Sumatra Utara" },
-        atletBiru: { nama: "Eko Prasetyo", kontingen: "Lampung" },
-        winner: null
-      },
-      {
-        id: 4,
-        round: "quarter",
-        partai: "Partai 07",
-        atletMerah: { nama: "Rizal Gibran", kontingen: "Kaltim" },
-        atletBiru: { nama: "Dimas Anggara", kontingen: "Sulsel" },
-        winner: null
-      },
-      {
-        id: 5,
-        round: "semi",
-        partai: "Partai 08",
-        atletMerah: { nama: "", kontingen: "" },
-        atletBiru: { nama: "", kontingen: "" },
-        winner: null
-      },
-      {
-        id: 6,
-        round: "semi",
-        partai: "Partai 09",
-        atletMerah: { nama: "", kontingen: "" },
-        atletBiru: { nama: "", kontingen: "" },
-        winner: null
-      },
-      {
-        id: 7,
-        round: "final",
-        partai: "Partai 10",
-        atletMerah: { nama: "", kontingen: "" },
-        atletBiru: { nama: "", kontingen: "" },
-        winner: null
-      }
-    ]
-  }
-];
-
-// Base initial state helper
-const createInitialState = (): MatchState => ({
-  namaEvent: "Kejuaraan Pencak Silat Nasional",
-  partai: "01",
-  kelas: "A",
-  gender: "Putra",
-  atletMerah: { nama: "Atlet Merah", kontingen: "SUDUT MERAH" },
-  atletBiru: { nama: "Atlet Biru", kontingen: "SUDUT BIRU" },
-  selectedWaktu: 120, // 2 minutes
-  
-  timerActive: false,
-  timerSeconds: 120,
-  currentBabak: 1,
-  matchStatus: "idle",
-  
-  logoKanan: null,
-  logoKiri: null,
-  logoTengah: null,
-  
-  juriHits: [],
-  
-  scores: {
-    merah: { babak1: 0, babak2: 0, babak3: 0, total: 0 },
-    biru: { babak1: 0, babak2: 0, babak3: 0, total: 0 }
-  },
-  
-  dewanPenalties: {
-    merah: { binaan1: false, binaan2: false, teguran1: false, teguran2: false, peringatan1: false, peringatan2: false, disqualified: false },
-    biru: { binaan1: false, binaan2: false, teguran1: false, teguran2: false, peringatan1: false, peringatan2: false, disqualified: false }
-  },
-  
-  directPoints: {
-    merah: 0,
-    biru: 0
-  },
-  
-  verification: {
-    active: false,
-    type: null,
-    votes: { juri1: null, juri2: null, juri3: null },
-    result: null
-  },
-  
-  lastValidScore: null,
-  winner: null,
-  juryPenaltyAccess: false,
-
-  // Bracket integrations
-  baganCategories: defaultBaganData,
-  activeBaganCategoryId: null,
-  activeBaganMatchId: null
-});
-
-// Authoritative Match State
-let state: MatchState & {
-  juriRawScores: {
-    juri1: { merah: { [key: number]: number }; biru: { [key: number]: number } };
-    juri2: { merah: { [key: number]: number }; biru: { [key: number]: number } };
-    juri3: { merah: { [key: number]: number }; biru: { [key: number]: number } };
-  }
-} = {
-  ...createInitialState(),
-  juriRawScores: {
-    juri1: { merah: { 1: 0, 2: 0, 3: 0 }, biru: { 1: 0, 2: 0, 3: 0 } },
-    juri2: { merah: { 1: 0, 2: 0, 3: 0 }, biru: { 1: 0, 2: 0, 3: 0 } },
-    juri3: { merah: { 1: 0, 2: 0, 3: 0 }, biru: { 1: 0, 2: 0, 3: 0 } }
-  }
-};
-
-// --- AUTHORITATIVE TGR (SENI) STATE ---
-const defaultTGRPeserta: TGRPeserta[] = [
-  {
-    id: "peserta_1",
-    noUrut: 1,
-    nama: "Aditya Wahyu",
-    kontingen: "DKI Jakarta",
-    kategori: "Tunggal",
-    status: "Sudah Menilai",
-    scores: { juri1: 9.910, juri2: 9.930, juri3: 9.920, juri4: 9.940, juri5: 9.915 },
-    kebenaranScores: { juri1: 9.500, juri2: 9.480, juri3: 9.510, juri4: 9.490, juri5: 9.520 },
-    isLocked: true,
-    decisions: ["Sah"],
-    deductions: 0.010,
-    finalScore: 9.918,
-    ranking: 1,
-    dewanDecisionScore: 0
-  },
-  {
-    id: "peserta_2",
-    noUrut: 2,
-    nama: "Rian & Hendra (Duo)",
-    kontingen: "Jawa Barat",
-    kategori: "Ganda",
-    status: "Sudah Menilai",
-    scores: { juri1: 9.880, juri2: 9.890, juri3: 9.875, juri4: 9.910, juri5: 9.885 },
-    kebenaranScores: { juri1: 9.400, juri2: 9.410, juri3: 9.380, juri4: 9.450, juri5: 9.420 },
-    isLocked: true,
-    decisions: ["Sah"],
-    deductions: 0,
-    finalScore: 9.885,
-    ranking: 2,
-    dewanDecisionScore: 0
-  },
-  {
-    id: "peserta_3",
-    noUrut: 3,
-    nama: "Fajar, Galang & Andi",
-    kontingen: "Jawa Timur",
-    kategori: "Regu",
-    status: "Belum Menilai",
-    scores: {},
-    kebenaranScores: {},
-    isLocked: false,
-    decisions: [],
-    deductions: 0,
-    dewanDecisionScore: 0
-  },
-  {
-    id: "peserta_4",
-    noUrut: 4,
-    nama: "Putri Lestari",
-    kontingen: "Jawa Tengah",
-    kategori: "Tunggal",
-    status: "Belum Menilai",
-    scores: {},
-    kebenaranScores: {},
-    isLocked: false,
-    decisions: [],
-    deductions: 0,
-    dewanDecisionScore: 0
-  }
-];
-
-let tgrState: TGRState = {
-  namaEvent: "Kejuaraan TGR Pencak Silat IPSI",
-  gelanggang: "Gelanggang A",
-  partai: "PARTAI 2",
-  babak: "FINAL",
-  activePesertaId: "peserta_1",
-  pesertaList: defaultTGRPeserta,
-  jumlahJuri: 5, // Default juri (can be 4 to 10)
-  sessionStatus: "open",
-  timerActive: false,
-  timerSeconds: 0,
-  selectedWaktu: 0,
-  auditLogs: [
-    { id: "log_1", timestamp: new Date().toISOString(), user: "Sistem", action: "Inisialisasi sistem TGR Pencak Silat IPSI Berhasil" }
-  ],
-  juriCorrections: {}
-};
-
-// Helper to recalculate TGR scores and ranks
-function recalculateTGRScores() {
-  const JCount = tgrState.jumlahJuri;
-
-  const getMedian = (arr: number[]): number => {
-    if (arr.length === 0) return 0;
-    const sorted = [...arr].sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    if (sorted.length % 2 !== 0) {
-      return sorted[mid];
-    } else {
-      return (sorted[mid - 1] + sorted[mid]) / 2;
-    }
-  };
-
-  const getStandardDeviation = (arr: number[]): number => {
-    if (arr.length <= 1) return 0;
-    const mean = arr.reduce((acc, v) => acc + v, 0) / arr.length;
-    const variance = arr.reduce((acc, v) => acc + Math.pow(v - mean, 2), 0) / arr.length;
-    return Math.sqrt(variance);
-  };
-
-  tgrState.pesertaList.forEach(peserta => {
-    const scoresArr = Object.entries(peserta.scores)
-      .filter(([key]) => {
-        const jNum = parseInt(key.replace('juri', ''));
-        return jNum >= 1 && jNum <= JCount;
-      })
-      .map(([_, val]) => val);
-
-    // Only compute if we have enough scores
-    if (scoresArr.length >= JCount) {
-      // Calculate base score as the median of all judges' scores
-      const baseScore = getMedian(scoresArr);
-      const finalScore = parseFloat((baseScore - peserta.deductions).toFixed(3));
-      
-      peserta.finalScore = finalScore;
-      peserta.status = "Sudah Menilai";
-    } else {
-      peserta.status = peserta.id === tgrState.activePesertaId ? "Sedang Tampil" : "Belum Menilai";
-      delete peserta.finalScore;
-    }
-  });
-
-  const getKebenaranSum = (p: TGRPeserta) => {
-    const kebArr = Object.entries(p.kebenaranScores)
-      .filter(([key]) => {
-        const jNum = parseInt(key.replace('juri', ''));
-        return jNum >= 1 && jNum <= JCount;
-      })
-      .map(([_, v]) => v);
-    return kebArr.reduce((sum, v) => sum + v, 0);
-  };
-
-  const getStdDev = (p: TGRPeserta) => {
-    const scoresArr = Object.entries(p.scores)
-      .filter(([key]) => {
-        const jNum = parseInt(key.replace('juri', ''));
-        return jNum >= 1 && jNum <= JCount;
-      })
-      .map(([_, val]) => val);
-    return getStandardDeviation(scoresArr);
-  };
-
-  // Now sort and rank peserta by finalScore descending
-  // Tie-breakers:
-  // a) Kebenaran gerak tertinggi (descending)
-  // b) Nilai hukuman lebih rendah (ascending - lower is better)
-  // c) Waktu terdekat dengan 3'00" (ascending - lower absolute diff is better)
-  // d) Standar Deviasi lebih rendah (ascending - lower is better)
-  const rankedPeserta = [...tgrState.pesertaList]
-    .filter(p => p.finalScore !== undefined)
-    .sort((a, b) => {
-      if (b.finalScore! !== a.finalScore!) {
-        return b.finalScore! - a.finalScore!;
-      }
-
-      // a) Kebenaran gerak tertinggi
-      const kebA = getKebenaranSum(a);
-      const kebB = getKebenaranSum(b);
-      if (kebB !== kebA) {
-        return kebB - kebA;
-      }
-
-      // b) Nilai hukuman lebih rendah
-      const penaltyA = a.deductions || 0;
-      const penaltyB = b.deductions || 0;
-      if (penaltyA !== penaltyB) {
-        return penaltyA - penaltyB;
-      }
-
-      // c) Waktu terdekat dengan 3'00" (180s)
-      const diffA = Math.abs((a.waktuTampil || 0) - 180);
-      const diffB = Math.abs((b.waktuTampil || 0) - 180);
-      if (diffA !== diffB) {
-        return diffA - diffB;
-      }
-
-      // d) Standar Deviasi lebih rendah
-      const stdDevA = getStdDev(a);
-      const stdDevB = getStdDev(b);
-      if (stdDevA !== stdDevB) {
-        return stdDevA - stdDevB;
-      }
-
-      // e) Dewan manual decision score fallback
-      const decA = a.dewanDecisionScore || 0;
-      const decB = b.dewanDecisionScore || 0;
-      return decB - decA;
-    });
-
-  // Assign ranks
-  tgrState.pesertaList.forEach(peserta => {
-    if (peserta.finalScore !== undefined) {
-      const idx = rankedPeserta.findIndex(rp => rp.id === peserta.id);
-      peserta.ranking = idx + 1;
-    } else {
-      delete peserta.ranking;
-    }
-  });
-}
-
-// Perform initial calculation on startup
-recalculateTGRScores();
-
 // SSE connections list
 let sseClients: any[] = [];
 
-const broadcastState = () => {
-  const payload = JSON.stringify({ type: 'STATE_UPDATE', state, histories: matchHistories, tgrState });
+const getArenasMapData = () => {
+  const result: Record<string, { state: MatchState; tgrState: TGRState; histories: MatchHistory[]; info: any }> = {};
+  for (const [key, container] of Object.entries(arenasMap)) {
+    result[key] = {
+      state: container.state,
+      tgrState: container.tgrState,
+      histories: container.histories,
+      info: container.info
+    };
+  }
+  return result;
+};
+
+const broadcastState = (specificArenaId?: string) => {
+  const arenasList = getArenasList();
+  const allArenasSummary = getArenasSummary();
+  const arenasFullMap = getArenasMapData();
+
+  // Send to all connected clients
   sseClients.forEach(client => {
-    client.write(`data: ${payload}\n\n`);
+    const clientArenaId = client._arenaId || 'arena_1';
+    const clientArena = getArena(clientArenaId);
+
+    const payload = JSON.stringify({
+      type: 'STATE_UPDATE',
+      arenaId: clientArenaId,
+      state: clientArena.state,
+      histories: clientArena.histories,
+      tgrState: clientArena.tgrState,
+      arenasList,
+      allArenasSummary,
+      arenas: arenasFullMap
+    });
+
+    try {
+      client.write(`data: ${payload}\n\n`);
+    } catch (err) {
+      // Ignore broken pipe
+    }
   });
 };
 
-// Recalculate total scores using standard IPSI rules
-function recalculateScores() {
-  let totalMerah = state.scores.merah.babak1 + state.scores.merah.babak2 + state.scores.merah.babak3 + state.directPoints.merah;
-  let totalBiru = state.scores.biru.babak1 + state.scores.biru.babak2 + state.scores.biru.babak3 + state.directPoints.biru;
-
-  // Adjust for Dewan Penalties
-  const penM = state.dewanPenalties.merah;
-  if (penM.teguran1) totalMerah -= 1;
-  if (penM.teguran2) totalMerah -= 2;
-  if (penM.peringatan1) totalMerah -= 5;
-  if (penM.peringatan2) totalMerah -= 10;
-
-  const penB = state.dewanPenalties.biru;
-  if (penB.teguran1) totalBiru -= 1;
-  if (penB.teguran2) totalBiru -= 2;
-  if (penB.peringatan1) totalBiru -= 5;
-  if (penB.peringatan2) totalBiru -= 10;
-
-  state.scores.merah.total = totalMerah;
-  state.scores.biru.total = totalBiru;
-}
-
-// Helper to trigger cascading winner update on the server
-function updateBaganWinnerOnServer(catId: string, matchId: number, winner: 'merah' | 'biru' | null) {
-  if (!state.baganCategories) return;
-
-  state.baganCategories = state.baganCategories.map(cat => {
-    if (cat.id !== catId) return cat;
-
-    // Deep copy matches
-    const updatedMatches = cat.matches.map(m => ({
-      ...m,
-      atletMerah: { ...m.atletMerah },
-      atletBiru: { ...m.atletBiru }
-    }));
-
-    const matchIndex = updatedMatches.findIndex(m => m.id === matchId);
-    if (matchIndex === -1) return cat;
-
-    const oldWinner = updatedMatches[matchIndex].winner;
-    updatedMatches[matchIndex].winner = winner;
-
-    const getAdvancedAthlete = (m: any, win: 'merah' | 'biru' | null) => {
-      if (win === 'merah') return m.atletMerah;
-      if (win === 'biru') return m.atletBiru;
-      return { nama: '', kontingen: '' };
-    };
-
-    const adv = getAdvancedAthlete(updatedMatches[matchIndex], winner);
-
-    // Helper to dynamically set athlete by Match ID safely
-    const setTargetAthlete = (targetId: number, side: 'merah' | 'biru', athlete: { nama: string; kontingen: string }) => {
-      const idx = updatedMatches.findIndex(m => m.id === targetId);
-      if (idx !== -1) {
-        if (side === 'merah') {
-          updatedMatches[idx].atletMerah = athlete;
-        } else {
-          updatedMatches[idx].atletBiru = athlete;
-        }
-      }
-    };
-
-    // Helper to dynamically clear winner by Match ID safely
-    const resetTargetWinner = (targetId: number) => {
-      const idx = updatedMatches.findIndex(m => m.id === targetId);
-      if (idx !== -1) {
-        updatedMatches[idx].winner = null;
-      }
-    };
-
-    // Cascading updates for size 8
-    if (cat.size === 8) {
-      if (matchId === 1) {
-        setTargetAthlete(5, 'merah', adv);
-        if (winner === null || oldWinner !== winner) {
-          resetTargetWinner(5);
-          setTargetAthlete(7, 'merah', { nama: '', kontingen: '' });
-          resetTargetWinner(7);
-        }
-      } else if (matchId === 2) {
-        setTargetAthlete(5, 'biru', adv);
-        if (winner === null || oldWinner !== winner) {
-          resetTargetWinner(5);
-          setTargetAthlete(7, 'merah', { nama: '', kontingen: '' });
-          resetTargetWinner(7);
-        }
-      } else if (matchId === 3) {
-        setTargetAthlete(6, 'merah', adv);
-        if (winner === null || oldWinner !== winner) {
-          resetTargetWinner(6);
-          setTargetAthlete(7, 'biru', { nama: '', kontingen: '' });
-          resetTargetWinner(7);
-        }
-      } else if (matchId === 4) {
-        setTargetAthlete(6, 'biru', adv);
-        if (winner === null || oldWinner !== winner) {
-          resetTargetWinner(6);
-          setTargetAthlete(7, 'biru', { nama: '', kontingen: '' });
-          resetTargetWinner(7);
-        }
-      } else if (matchId === 5) {
-        setTargetAthlete(7, 'merah', adv);
-        if (winner === null || oldWinner !== winner) {
-          resetTargetWinner(7);
-        }
-      } else if (matchId === 6) {
-        setTargetAthlete(7, 'biru', adv);
-        if (winner === null || oldWinner !== winner) {
-          resetTargetWinner(7);
-        }
-      }
-    } 
-    // Cascading updates for size 4
-    else if (cat.size === 4) {
-      if (matchId === 1) {
-        setTargetAthlete(3, 'merah', adv);
-        if (winner === null || oldWinner !== winner) {
-          resetTargetWinner(3);
-        }
-      } else if (matchId === 2) {
-        setTargetAthlete(3, 'biru', adv);
-        if (winner === null || oldWinner !== winner) {
-          resetTargetWinner(3);
-        }
-      }
-
-      // Automatic bye in final (Match 3)
-      const m1 = updatedMatches.find(m => m.id === 1);
-      const m2 = updatedMatches.find(m => m.id === 2);
-      const m3 = updatedMatches.find(m => m.id === 3);
-      if (m1 && m2 && m3) {
-        const semi1Resolved = m1.winner !== null || (!m1.atletMerah.nama && !m1.atletBiru.nama);
-        const semi2Resolved = m2.winner !== null || (!m2.atletMerah.nama && !m2.atletBiru.nama);
-        if (semi1Resolved && semi2Resolved) {
-          if (m3.atletMerah.nama && !m3.atletBiru.nama) {
-            m3.winner = 'merah';
-          } else if (m3.atletBiru.nama && !m3.atletMerah.nama) {
-            m3.winner = 'biru';
-          }
-        }
-      }
-    }
-
-    return {
-      ...cat,
-      matches: updatedMatches
-    };
-  });
-}
-
-// Automatically determine winner when match completes or upon disqualification
-function determineWinner() {
-  if (state.dewanPenalties.merah.disqualified) {
-    state.winner = 'biru';
-    state.matchStatus = 'selesai';
-  } else if (state.dewanPenalties.biru.disqualified) {
-    state.winner = 'merah';
-    state.matchStatus = 'selesai';
-  } else {
-    // Determine by higher score
-    if (state.scores.merah.total > state.scores.biru.total) {
-      state.winner = 'merah';
-    } else if (state.scores.biru.total > state.scores.merah.total) {
-      state.winner = 'biru';
-    } else {
-      // If exact tie, let's say tie, or winner null
-      state.winner = null;
-    }
-    state.matchStatus = 'selesai';
-  }
-
-  // Save to history
-  const newHistory: MatchHistory = {
-    id: Math.random().toString(36).substring(2),
-    namaEvent: state.namaEvent,
-    partai: state.partai,
-    kelas: state.kelas,
-    gender: state.gender,
-    atletMerah: { ...state.atletMerah },
-    atletBiru: { ...state.atletBiru },
-    winner: state.winner,
-    skorAkhirMerah: state.scores.merah.total,
-    skorAkhirBiru: state.scores.biru.total,
-    tanggal: new Date().toISOString()
-  };
-  matchHistories.push(newHistory);
-
-  // Automatically advance winner in brackets if a bracket match is currently loaded!
-  if (state.activeBaganCategoryId && state.activeBaganMatchId) {
-    updateBaganWinnerOnServer(state.activeBaganCategoryId, state.activeBaganMatchId, state.winner);
-  }
-}
-
-// Central Timer count down tick
+// Central Timer count down tick for all Arenas in parallel
 setInterval(() => {
   let changed = false;
-  if (state.timerActive && state.timerSeconds > 0) {
-    state.timerSeconds--;
-    if (state.timerSeconds === 0) {
-      state.timerActive = false;
-      if (state.currentBabak < 3) {
-        state.matchStatus = 'babak_habis';
-      } else {
-        determineWinner();
+
+  for (const arena of Object.values(arenasMap)) {
+    // 1. Tanding Match Timer
+    if (arena.state.timerActive && arena.state.timerSeconds > 0) {
+      arena.state.timerSeconds--;
+      if (arena.state.timerSeconds === 0) {
+        arena.state.timerActive = false;
+        if (arena.state.currentBabak < 3) {
+          arena.state.matchStatus = 'babak_habis';
+        } else {
+          determineArenaWinner(arena);
+        }
       }
+      changed = true;
     }
-    changed = true;
-  }
-  if (tgrState.timerActive) {
-    tgrState.timerSeconds++;
-    if (tgrState.activePesertaId) {
-      const activeP = tgrState.pesertaList.find(p => p.id === tgrState.activePesertaId);
-      if (activeP) {
-        activeP.waktuTampil = tgrState.timerSeconds;
-        recalculateTGRScores();
+
+    // 2. TGR Seni Timer
+    if (arena.tgrState.timerActive) {
+      arena.tgrState.timerSeconds++;
+      if (arena.tgrState.activePesertaId) {
+        const activeP = arena.tgrState.pesertaList.find(p => p.id === arena.tgrState.activePesertaId);
+        if (activeP) {
+          activeP.waktuTampil = arena.tgrState.timerSeconds;
+          recalculateArenaTGRScores(arena);
+        }
       }
+      changed = true;
     }
-    changed = true;
   }
+
   if (changed) {
     broadcastState();
   }
@@ -656,13 +112,28 @@ setInterval(() => {
 
 // SSE connection setup
 app.get('/api/events', (req, res) => {
+  const reqArena = (req.query.arena as string) || 'arena_1';
+
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders && res.flushHeaders();
 
-  // Send initial state immediately
-  res.write(`data: ${JSON.stringify({ type: 'STATE_UPDATE', state, histories: matchHistories, tgrState })}\n\n`);
+  (res as any)._arenaId = reqArena;
+
+  const arena = getArena(reqArena);
+  const initialPayload = JSON.stringify({
+    type: 'STATE_UPDATE',
+    arenaId: reqArena,
+    state: arena.state,
+    histories: arena.histories,
+    tgrState: arena.tgrState,
+    arenasList: getArenasList(),
+    allArenasSummary: getArenasSummary(),
+    arenas: getArenasMapData()
+  });
+
+  res.write(`data: ${initialPayload}\n\n`);
 
   sseClients.push(res);
 
@@ -671,16 +142,476 @@ app.get('/api/events', (req, res) => {
   });
 });
 
-// REST API endpoint to post changes
+// REST API endpoint to query state
 app.get('/api/state', (req, res) => {
-  res.json({ state, histories: matchHistories, tgrState });
+  const reqArena = (req.query.arena as string) || 'arena_1';
+  const arena = getArena(reqArena);
+  res.json({
+    state: arena.state,
+    histories: arena.histories,
+    tgrState: arena.tgrState,
+    arenaId: arena.info.id,
+    arenasList: getArenasList(),
+    allArenasSummary: getArenasSummary(),
+    arenas: getArenasMapData()
+  });
+});
+
+// REST API endpoint to query arenas list and summaries
+app.get('/api/arenas', (req, res) => {
+  res.json({
+    arenasList: getArenasList(),
+    allArenasSummary: getArenasSummary(),
+    arenas: getArenasMapData()
+  });
 });
 
 app.post('/api/action', (req, res) => {
   const { type, payload } = req.body;
+  const reqArenaId = req.body.arenaId || payload?.arenaId || (req.query.arena as string) || 'arena_1';
+  const arena = getArena(reqArenaId);
+  const state = arena.state;
+  const tgrState = arena.tgrState;
 
   try {
+    // Automatically track active mode for the arena: TGR/Seni vs Tanding
+    if (type && type.startsWith('TGR_')) {
+      arena.info.modeAktif = 'seni';
+    } else if (
+      type === 'START_MATCH' ||
+      type === 'TOGGLE_TIMER' ||
+      type === 'LOAD_BAGAN_MATCH' ||
+      type === 'RESET_OR_NEXT_PARTAI' ||
+      type === 'SET_BABAK' ||
+      type === 'JURI_HIT' ||
+      type === 'DEWAN_PENALTY' ||
+      type === 'SEKRETARIS_ADJUST_PARTAI' ||
+      type === 'UPDATE_BAGAN_CATEGORIES' ||
+      type === 'UPDATE_EVENT_INFO'
+    ) {
+      arena.info.modeAktif = 'tanding';
+    }
+
     switch (type) {
+      // --- ARENA MANAGEMENT ACTIONS ---
+      case 'ADD_GELANGGANG': {
+        const newId = payload.id || `arena_${Date.now()}`;
+        const count = Object.keys(arenasMap).length + 1;
+        const newName = payload.nama || `Gelanggang ${count}`;
+        const newCode = payload.kode || `${count}`;
+        const newKet = payload.keterangan || `Matras ${count}`;
+        const newMode = payload.modeAktif || 'tanding';
+
+        const newArena = createDefaultArena(newId, newName, newCode, newKet, newMode);
+
+        if (payload.copyBaganFrom && arenasMap[payload.copyBaganFrom]) {
+          newArena.state.baganCategories = JSON.parse(JSON.stringify(arenasMap[payload.copyBaganFrom].state.baganCategories));
+        }
+
+        arenasMap[newId] = newArena;
+        break;
+      }
+      case 'UPDATE_GELANGGANG': {
+        const targetId = payload.id || reqArenaId;
+        const targetArena = getArena(targetId);
+        if (payload.nama) {
+          targetArena.info.nama = payload.nama;
+          targetArena.state.gelanggang = payload.nama;
+          targetArena.tgrState.gelanggang = payload.nama;
+        }
+        if (payload.kode) {
+          targetArena.info.kode = payload.kode;
+        }
+        if (payload.keterangan !== undefined) {
+          targetArena.info.keterangan = payload.keterangan;
+        }
+        if (payload.modeAktif) {
+          targetArena.info.modeAktif = payload.modeAktif;
+        }
+        if (payload.status) {
+          targetArena.info.status = payload.status;
+        }
+        break;
+      }
+      case 'DELETE_GELANGGANG': {
+        const delId = payload.id;
+        if (delId && Object.keys(arenasMap).length > 1 && arenasMap[delId]) {
+          delete arenasMap[delId];
+        }
+        break;
+      }
+      case 'RESET_GELANGGANG': {
+        const targetId = payload.id || reqArenaId;
+        const target = getArena(targetId);
+        if (payload.resetType === 'seni') {
+          target.tgrState = createInitialTGRState(target.info.nama);
+        } else if (payload.resetType === 'tanding') {
+          const init = createInitialMatchState(target.info.nama);
+          target.state = {
+            ...init,
+            juriRawScores: {
+              juri1: { merah: { 1: 0, 2: 0, 3: 0 }, biru: { 1: 0, 2: 0, 3: 0 } },
+              juri2: { merah: { 1: 0, 2: 0, 3: 0 }, biru: { 1: 0, 2: 0, 3: 0 } },
+              juri3: { merah: { 1: 0, 2: 0, 3: 0 }, biru: { 1: 0, 2: 0, 3: 0 } }
+            }
+          };
+        } else {
+          const init = createInitialMatchState(target.info.nama);
+          target.state = {
+            ...init,
+            juriRawScores: {
+              juri1: { merah: { 1: 0, 2: 0, 3: 0 }, biru: { 1: 0, 2: 0, 3: 0 } },
+              juri2: { merah: { 1: 0, 2: 0, 3: 0 }, biru: { 1: 0, 2: 0, 3: 0 } },
+              juri3: { merah: { 1: 0, 2: 0, 3: 0 }, biru: { 1: 0, 2: 0, 3: 0 } }
+            }
+          };
+          target.tgrState = createInitialTGRState(target.info.nama);
+          target.histories = [];
+        }
+        break;
+      }
+
+      // --- CROSS-ARENA SCHEDULE MANAGEMENT ACTIONS ---
+      case 'TRANSFER_CATEGORY_TO_ARENA': {
+        const { sourceArenaId, targetArenaId, categoryId, isCopy } = payload;
+        const sourceArena = getArena(sourceArenaId);
+        const targetArena = getArena(targetArenaId);
+        if (sourceArena && targetArena && sourceArena.state.baganCategories) {
+          const catIndex = sourceArena.state.baganCategories.findIndex(c => c.id === categoryId);
+          if (catIndex !== -1) {
+            const cat = sourceArena.state.baganCategories[catIndex];
+            if (!targetArena.state.baganCategories) targetArena.state.baganCategories = [];
+            targetArena.state.baganCategories.push(JSON.parse(JSON.stringify(cat)));
+            if (!isCopy) {
+              sourceArena.state.baganCategories.splice(catIndex, 1);
+            }
+          }
+        }
+        break;
+      }
+      case 'TRANSFER_PESERTA_TGR_TO_ARENA': {
+        const { sourceArenaId, targetArenaId, pesertaId, isCopy } = payload;
+        const sourceArena = getArena(sourceArenaId);
+        const targetArena = getArena(targetArenaId);
+        if (sourceArena && targetArena && sourceArena.tgrState.pesertaList) {
+          const pIndex = sourceArena.tgrState.pesertaList.findIndex(p => p.id === pesertaId);
+          if (pIndex !== -1) {
+            const peserta = sourceArena.tgrState.pesertaList[pIndex];
+            if (!targetArena.tgrState.pesertaList) targetArena.tgrState.pesertaList = [];
+            const newPeserta = JSON.parse(JSON.stringify(peserta));
+            newPeserta.noUrut = targetArena.tgrState.pesertaList.length + 1;
+            newPeserta.noUndian = newPeserta.noUrut;
+            newPeserta.partaiNumber = newPeserta.noUrut;
+            newPeserta.partai = `PARTAI ${newPeserta.noUrut}`;
+            targetArena.tgrState.pesertaList.push(newPeserta);
+            if (!targetArena.tgrState.activePesertaId) {
+              targetArena.tgrState.activePesertaId = newPeserta.id;
+              targetArena.tgrState.partai = newPeserta.partai;
+            }
+            if (!isCopy) {
+              sourceArena.tgrState.pesertaList.splice(pIndex, 1);
+              if (sourceArena.tgrState.activePesertaId === pesertaId) {
+                sourceArena.tgrState.activePesertaId = sourceArena.tgrState.pesertaList[0]?.id || null;
+              }
+            }
+          }
+        }
+        break;
+      }
+      case 'DISTRIBUTE_TANDING_SCHEDULE': {
+        const { sourceArenaId, targetArenaIds, method } = payload; // method: 'round_robin' | 'even_split'
+        const sourceArena = getArena(sourceArenaId);
+        if (sourceArena && sourceArena.state.baganCategories && targetArenaIds && targetArenaIds.length > 0) {
+          const categories = JSON.parse(JSON.stringify(sourceArena.state.baganCategories));
+          const numTargets = targetArenaIds.length;
+          
+          targetArenaIds.forEach((targetId: string) => {
+            const tArena = getArena(targetId);
+            if (tArena) tArena.state.baganCategories = [];
+          });
+
+          categories.forEach((cat: any, idx: number) => {
+            const targetId = targetArenaIds[idx % numTargets];
+            const tArena = getArena(targetId);
+            if (tArena) {
+              if (!tArena.state.baganCategories) tArena.state.baganCategories = [];
+              tArena.state.baganCategories.push(cat);
+            }
+          });
+        }
+        break;
+      }
+      case 'DISTRIBUTE_SENI_SCHEDULE': {
+        const { sourceArenaId, targetArenaIds } = payload;
+        const sourceArena = getArena(sourceArenaId);
+        if (sourceArena && sourceArena.tgrState.pesertaList && targetArenaIds && targetArenaIds.length > 0) {
+          const participants = JSON.parse(JSON.stringify(sourceArena.tgrState.pesertaList));
+          const numTargets = targetArenaIds.length;
+
+          targetArenaIds.forEach((targetId: string) => {
+            const tArena = getArena(targetId);
+            if (tArena) {
+              tArena.tgrState.pesertaList = [];
+              tArena.tgrState.activePesertaId = null;
+            }
+          });
+
+          participants.forEach((p: any, idx: number) => {
+            const targetId = targetArenaIds[idx % numTargets];
+            const tArena = getArena(targetId);
+            if (tArena) {
+              const newP = { ...p, noUrut: tArena.tgrState.pesertaList.length + 1 };
+              newP.partaiNumber = newP.noUrut;
+              newP.partai = `PARTAI ${newP.noUrut}`;
+              tArena.tgrState.pesertaList.push(newP);
+              if (!tArena.tgrState.activePesertaId) {
+                tArena.tgrState.activePesertaId = newP.id;
+                tArena.tgrState.partai = newP.partai;
+              }
+            }
+          });
+        }
+        break;
+      }
+
+      case 'SET_ARENA_MODE': {
+        const targetId = payload.arenaId || reqArenaId;
+        const targetArena = getArena(targetId);
+        if (targetArena && payload.modeAktif) {
+          targetArena.info.modeAktif = payload.modeAktif;
+        }
+        break;
+      }
+
+      case 'DISTRIBUTE_EXCEL_ALL_ARENAS': {
+        const {
+          tandingCategories = [],
+          seniPesertaList = [],
+          targetArenaIds,
+          arenaDistributions,
+          reorderStrategy = 'standar_ipsi_babak'
+        } = payload;
+
+        // Find all active arenas
+        let activeArenas = (targetArenaIds && targetArenaIds.length > 0)
+          ? targetArenaIds.map((id: string) => getArena(id)).filter(Boolean)
+          : Object.values(arenasMap).filter(a => a.info.status === 'aktif');
+
+        if (activeArenas.length === 0) {
+          activeArenas = Object.values(arenasMap);
+        }
+
+        // Check if there are dedicated tanding and seni arenas
+        let tandingArenas = activeArenas.filter(a => a.info.modeAktif === 'tanding');
+        let seniArenas = activeArenas.filter(a => a.info.modeAktif === 'seni');
+
+        if (tandingArenas.length === 0 && tandingCategories.length > 0) {
+          tandingArenas = activeArenas;
+        }
+        if (seniArenas.length === 0 && seniPesertaList.length > 0) {
+          seniArenas = activeArenas;
+        }
+
+        const getRoundProgressionRank = (round: string): number => {
+          switch ((round || '').toLowerCase()) {
+            case 'sixtyfourth':
+            case 'thirtysecond':
+              return 1;
+            case 'sixteenth':
+            case 'eighth':
+              return 2;
+            case 'quarter':
+              return 3;
+            case 'semi':
+              return 4;
+            case 'final':
+              return 5;
+            default:
+              return 3;
+          }
+        };
+
+        // 1. Distribute Tanding Categories across active tanding arenas
+        if (arenaDistributions) {
+          // Direct per-arena distribution provided by the UI
+          Object.entries(arenaDistributions).forEach(([aId, dist]: [string, any]) => {
+            const arena = getArena(aId);
+            if (!arena) return;
+
+            if (dist.tandingCategories && Array.isArray(dist.tandingCategories)) {
+              arena.state.baganCategories = JSON.parse(JSON.stringify(dist.tandingCategories));
+              arena.state.baganCategories.forEach(cat => {
+                cat.gelanggang = arena.info.nama;
+                cat.arenaId = arena.info.id;
+                cat.matches.forEach((m: any) => {
+                  m.gelanggang = arena.info.nama;
+                  m.arenaId = arena.info.id;
+                });
+              });
+            }
+          });
+        } else if (tandingCategories.length > 0 && tandingArenas.length > 0) {
+          tandingArenas.forEach(a => {
+            a.state.baganCategories = [];
+          });
+
+          // Round-robin distribution of entire category brackets so participants never leave their gelanggang
+          tandingCategories.forEach((cat: any, idx: number) => {
+            const targetArena = tandingArenas[idx % tandingArenas.length];
+            const clonedCat = JSON.parse(JSON.stringify(cat));
+            clonedCat.gelanggang = targetArena.info.nama;
+            clonedCat.arenaId = targetArena.info.id;
+            clonedCat.matches.forEach((m: any) => {
+              m.gelanggang = targetArena.info.nama;
+              m.arenaId = targetArena.info.id;
+            });
+            targetArena.state.baganCategories.push(clonedCat);
+          });
+        }
+
+        // Sequence matches and assign sequential partais per arena
+        const arenasToSequence = arenaDistributions
+          ? Object.keys(arenaDistributions).map(id => getArena(id)).filter(Boolean)
+          : tandingArenas;
+
+        arenasToSequence.forEach(arena => {
+          if (!arena.state.baganCategories || arena.state.baganCategories.length === 0) return;
+
+          if (reorderStrategy === 'standar_ipsi_babak') {
+            // Flatten all matches with metadata to sort by IPSI progression rank
+            const flattenedMatches: { catId: string; catName: string; match: any; roundRank: number }[] = [];
+            arena.state.baganCategories.forEach(cat => {
+              cat.matches.forEach((m: any) => {
+                flattenedMatches.push({
+                  catId: cat.id,
+                  catName: cat.name || '',
+                  match: m,
+                  roundRank: getRoundProgressionRank(m.round)
+                });
+              });
+            });
+
+            // Sort: Preliminary rounds first -> Quarter Finals -> Semi Finals -> Finals
+            flattenedMatches.sort((a, b) => {
+              if (a.roundRank !== b.roundRank) return a.roundRank - b.roundRank;
+              if (a.catName !== b.catName) return a.catName.localeCompare(b.catName);
+              return (a.match.id || 0) - (b.match.id || 0);
+            });
+
+            // Renumber sequentially
+            flattenedMatches.forEach((item, idx) => {
+              const num = idx + 1;
+              const partaiStr = `Partai ${num < 10 ? '0' + num : num}`;
+              item.match.partai = partaiStr;
+              item.match.gelanggang = arena.info.nama;
+              item.match.arenaId = arena.info.id;
+            });
+          } else {
+            // Per category sequential
+            let partaiNum = 1;
+            arena.state.baganCategories.forEach(cat => {
+              cat.gelanggang = arena.info.nama;
+              cat.arenaId = arena.info.id;
+              cat.matches.forEach((m: any) => {
+                m.partai = `Partai ${partaiNum < 10 ? '0' + partaiNum : partaiNum}`;
+                m.gelanggang = arena.info.nama;
+                m.arenaId = arena.info.id;
+                partaiNum++;
+              });
+            });
+          }
+
+          // Find the match with Partai 01 (or first match) to initialize the active match
+          let firstCat = arena.state.baganCategories[0];
+          let firstMatch = firstCat?.matches[0];
+          for (const cat of arena.state.baganCategories) {
+            for (const m of cat.matches) {
+              if (m.partai === 'Partai 01' || m.partai === 'Partai 1') {
+                firstCat = cat;
+                firstMatch = m;
+                break;
+              }
+            }
+            if (firstMatch?.partai === 'Partai 01' || firstMatch?.partai === 'Partai 1') break;
+          }
+
+          if (firstMatch && firstCat) {
+            arena.state.activeBaganCategoryId = firstCat.id;
+            arena.state.activeBaganMatchId = firstMatch.id;
+            arena.state.partai = firstMatch.partai;
+            arena.state.kelas = firstCat.kelas || arena.state.kelas;
+            arena.state.gender = firstCat.gender || arena.state.gender;
+            if (firstMatch.atletMerah) arena.state.atletMerah = { ...firstMatch.atletMerah };
+            if (firstMatch.atletBiru) arena.state.atletBiru = { ...firstMatch.atletBiru };
+            arena.state.scores = {
+              merah: { babak1: 0, babak2: 0, babak3: 0, total: 0 },
+              biru: { babak1: 0, babak2: 0, babak3: 0, total: 0 }
+            };
+            arena.state.winner = null;
+            arena.state.matchStatus = 'idle';
+            arena.state.timerActive = false;
+            arena.state.timerSeconds = arena.state.selectedWaktu || 120;
+            arena.state.juriHits = [];
+            arena.info.modeAktif = 'tanding';
+          }
+        });
+
+        // 2. Distribute Seni Participants across active seni arenas
+        if (arenaDistributions) {
+          Object.entries(arenaDistributions).forEach(([aId, dist]: [string, any]) => {
+            const arena = getArena(aId);
+            if (!arena) return;
+            if (dist.seniPesertaList && Array.isArray(dist.seniPesertaList)) {
+              arena.tgrState.pesertaList = [];
+              dist.seniPesertaList.forEach((p: any, idx: number) => {
+                const newOrder = idx + 1;
+                const newP = {
+                  ...p,
+                  noUrut: newOrder,
+                  partaiNumber: newOrder,
+                  partai: `PARTAI ${newOrder < 10 ? '0' + newOrder : newOrder}`
+                };
+                arena.tgrState.pesertaList.push(newP);
+              });
+              if (arena.tgrState.pesertaList.length > 0) {
+                arena.tgrState.activePesertaId = arena.tgrState.pesertaList[0].id;
+                arena.tgrState.partai = arena.tgrState.pesertaList[0].partai;
+                arena.info.modeAktif = 'seni';
+              }
+            }
+          });
+        } else if (seniPesertaList.length > 0 && seniArenas.length > 0) {
+          seniArenas.forEach(a => {
+            a.tgrState.pesertaList = [];
+            a.tgrState.activePesertaId = null;
+          });
+
+          seniPesertaList.forEach((p: any, idx: number) => {
+            const targetArena = seniArenas[idx % seniArenas.length];
+            const newOrder = targetArena.tgrState.pesertaList.length + 1;
+            const newP = {
+              ...p,
+              noUrut: newOrder,
+              partaiNumber: newOrder,
+              partai: `PARTAI ${newOrder < 10 ? '0' + newOrder : newOrder}`
+            };
+            targetArena.tgrState.pesertaList.push(newP);
+            if (!targetArena.tgrState.activePesertaId) {
+              targetArena.tgrState.activePesertaId = newP.id;
+              targetArena.tgrState.partai = newP.partai;
+            }
+          });
+
+          seniArenas.forEach(a => {
+            if (a.tgrState.pesertaList.length > 0) {
+              a.info.modeAktif = 'seni';
+            }
+          });
+        }
+        break;
+      }
+
+      // --- TANDING ACTIONS ---
       case 'UPDATE_EVENT_INFO': {
         state.namaEvent = payload.namaEvent || state.namaEvent;
         state.partai = payload.partai || state.partai;
@@ -691,6 +622,21 @@ app.post('/api/action', (req, res) => {
         state.activeBaganMatchId = payload.activeBaganMatchId !== undefined ? payload.activeBaganMatchId : state.activeBaganMatchId;
         if (state.matchStatus === 'idle') {
           state.timerSeconds = state.selectedWaktu;
+        }
+        break;
+      }
+      case 'UPDATE_METADATA': {
+        if (payload.namaEvent !== undefined) state.namaEvent = payload.namaEvent;
+        if (payload.partai !== undefined) state.partai = payload.partai;
+        if (payload.kelas !== undefined) state.kelas = payload.kelas;
+        if (payload.gender !== undefined) state.gender = payload.gender;
+        if (payload.atletMerah) state.atletMerah = { ...state.atletMerah, ...payload.atletMerah };
+        if (payload.atletBiru) state.atletBiru = { ...state.atletBiru, ...payload.atletBiru };
+        if (payload.selectedWaktu !== undefined) {
+          state.selectedWaktu = payload.selectedWaktu;
+          if (state.matchStatus === 'idle') {
+            state.timerSeconds = payload.selectedWaktu;
+          }
         }
         break;
       }
@@ -706,13 +652,36 @@ app.post('/api/action', (req, res) => {
         break;
       }
       case 'UPLOAD_LOGOS': {
-        if (payload.logoKanan !== undefined) state.logoKanan = payload.logoKanan;
-        if (payload.logoKiri !== undefined) state.logoKiri = payload.logoKiri;
-        if (payload.logoTengah !== undefined) state.logoTengah = payload.logoTengah;
+        if (payload.logoKanan !== undefined) {
+          state.logoKanan = payload.logoKanan;
+          tgrState.logoKanan = payload.logoKanan;
+        }
+        if (payload.logoKiri !== undefined) {
+          state.logoKiri = payload.logoKiri;
+          tgrState.logoKiri = payload.logoKiri;
+        }
+        if (payload.logoTengah !== undefined) {
+          state.logoTengah = payload.logoTengah;
+          tgrState.logoTengah = payload.logoTengah;
+        }
+        break;
+      }
+      case 'TGR_UPLOAD_LOGOS': {
+        if (payload.logoKanan !== undefined) {
+          tgrState.logoKanan = payload.logoKanan;
+          state.logoKanan = payload.logoKanan;
+        }
+        if (payload.logoKiri !== undefined) {
+          tgrState.logoKiri = payload.logoKiri;
+          state.logoKiri = payload.logoKiri;
+        }
+        if (payload.logoTengah !== undefined) {
+          tgrState.logoTengah = payload.logoTengah;
+          state.logoTengah = payload.logoTengah;
+        }
         break;
       }
       case 'START_MATCH': {
-        // Prepare or clear variables for clean game
         state.juriHits = [];
         state.winner = null;
         state.timerActive = true;
@@ -740,7 +709,7 @@ app.post('/api/action', (req, res) => {
           result: null
         };
         state.lastValidScore = null;
-        recalculateScores();
+        recalculateArenaScores(arena);
         break;
       }
       case 'TOGGLE_TIMER': {
@@ -766,28 +735,25 @@ app.post('/api/action', (req, res) => {
         state.timerActive = false;
         state.matchStatus = 'paused';
         
-        // Auto-reset "Binaan" penalties on round (babak) change
         state.dewanPenalties.merah.binaan1 = false;
         state.dewanPenalties.merah.binaan2 = false;
         state.dewanPenalties.biru.binaan1 = false;
         state.dewanPenalties.biru.binaan2 = false;
-        recalculateScores();
+        recalculateArenaScores(arena);
         break;
       }
       case 'APPROVE_NEXT_BABAK': {
-        // Called when secretary clicks YES on "Lanjut ke Babak Selanjutnya" dialog
         if (state.currentBabak < 3) {
           state.currentBabak += 1;
           state.timerSeconds = state.selectedWaktu;
           state.timerActive = false;
           state.matchStatus = 'paused';
           
-          // Auto-reset "Binaan" penalties on round (babak) change
           state.dewanPenalties.merah.binaan1 = false;
           state.dewanPenalties.merah.binaan2 = false;
           state.dewanPenalties.biru.binaan1 = false;
           state.dewanPenalties.biru.binaan2 = false;
-          recalculateScores();
+          recalculateArenaScores(arena);
         }
         break;
       }
@@ -798,9 +764,9 @@ app.post('/api/action', (req, res) => {
           logoKanan: state.logoKanan,
           logoTengah: state.logoTengah
         };
-        const init = createInitialState();
-        state = {
-          ...state,
+        const init = createInitialMatchState(arena.info.nama);
+        arena.state = {
+          ...arena.state,
           ...init,
           ...existingLogos,
           baganCategories: existingCategories,
@@ -813,35 +779,33 @@ app.post('/api/action', (req, res) => {
           }
         };
 
-        state.namaEvent = payload.namaEvent || state.namaEvent;
-        state.partai = payload.partai || state.partai;
-        state.kelas = payload.kelas || state.kelas;
-        state.gender = payload.gender || state.gender;
+        arena.state.namaEvent = payload.namaEvent || arena.state.namaEvent;
+        arena.state.partai = payload.partai || arena.state.partai;
+        arena.state.kelas = payload.kelas || arena.state.kelas;
+        arena.state.gender = payload.gender || arena.state.gender;
         if (payload.selectedWaktu) {
-          state.selectedWaktu = payload.selectedWaktu;
+          arena.state.selectedWaktu = payload.selectedWaktu;
         }
-        state.activeBaganCategoryId = payload.activeBaganCategoryId !== undefined ? payload.activeBaganCategoryId : state.activeBaganCategoryId;
-        state.activeBaganMatchId = payload.activeBaganMatchId !== undefined ? payload.activeBaganMatchId : state.activeBaganMatchId;
+        arena.state.activeBaganCategoryId = payload.activeBaganCategoryId !== undefined ? payload.activeBaganCategoryId : arena.state.activeBaganCategoryId;
+        arena.state.activeBaganMatchId = payload.activeBaganMatchId !== undefined ? payload.activeBaganMatchId : arena.state.activeBaganMatchId;
         
-        state.atletMerah = { ...state.atletMerah, ...payload.atletMerah };
-        state.atletBiru = { ...state.atletBiru, ...payload.atletBiru };
+        arena.state.atletMerah = { ...arena.state.atletMerah, ...payload.atletMerah };
+        arena.state.atletBiru = { ...arena.state.atletBiru, ...payload.atletBiru };
+        arena.state.timerSeconds = arena.state.selectedWaktu;
         
-        state.timerSeconds = state.selectedWaktu;
-        
-        recalculateScores();
+        recalculateArenaScores(arena);
         break;
       }
       case 'RESET_OR_NEXT_PARTAI': {
-        // Proceed on to the next match/reset
         const existingCategories = state.baganCategories;
         const existingLogos = {
           logoKiri: state.logoKiri,
           logoKanan: state.logoKanan,
           logoTengah: state.logoTengah
         };
-        const init = createInitialState();
-        state = {
-          ...state,
+        const init = createInitialMatchState(arena.info.nama);
+        arena.state = {
+          ...arena.state,
           ...init,
           ...existingLogos,
           baganCategories: existingCategories,
@@ -855,11 +819,10 @@ app.post('/api/action', (req, res) => {
             juri3: { merah: { 1: 0, 2: 0, 3: 0 }, biru: { 1: 0, 2: 0, 3: 0 } }
           }
         };
-        recalculateScores();
+        recalculateArenaScores(arena);
         break;
       }
       case 'JURI_HIT': {
-        // Ensure judge clicks only counted while match is active running
         if (state.matchStatus !== 'running' || !state.timerActive) {
           break;
         }
@@ -868,11 +831,9 @@ app.post('/api/action', (req, res) => {
         const now = Date.now();
         const b = state.currentBabak;
 
-        // 1. Record raw score for that judge split by Babak
         const pts = aksi === 'punch' ? 1 : 2;
         state.juriRawScores[`juri${juriId}`][sudut][b] += pts;
 
-        // 2. Create the Hit item
         const newHit: JuriHit = {
           id: Math.random().toString(36).substring(2),
           juriId,
@@ -884,8 +845,6 @@ app.post('/api/action', (req, res) => {
         };
         state.juriHits.push(newHit);
 
-        // 3. Search for unmatched hit of same corner, same action, same round
-        // within 1.5 seconds tolerance window from other judges
         const candidate = state.juriHits.find(hit => 
           hit.isMatched === false &&
           hit.juriId !== juriId &&
@@ -896,11 +855,9 @@ app.post('/api/action', (req, res) => {
         );
 
         if (candidate) {
-          // Double judged match! Validate point
           newHit.isMatched = true;
           candidate.isMatched = true;
 
-          // Increment standard score for that round
           if (sudut === 'merah') {
             const currentRoundScore = state.scores.merah[`babak${b}` as keyof ScoreBreakdown] || 0;
             state.scores.merah[`babak${b}` as keyof Omit<ScoreBreakdown, 'total'>] = currentRoundScore + pts;
@@ -909,13 +866,12 @@ app.post('/api/action', (req, res) => {
             state.scores.biru[`babak${b}` as keyof Omit<ScoreBreakdown, 'total'>] = currentRoundScore + pts;
           }
 
-          // Trigger screen highlight on the Monitor
           state.lastValidScore = {
             timestamp: now,
             sudut,
             aksi
           };
-          recalculateScores();
+          recalculateArenaScores(arena);
         }
         break;
       }
@@ -927,14 +883,12 @@ app.post('/api/action', (req, res) => {
         const { sudut, penaltyType } = payload as { sudut: 'merah' | 'biru'; penaltyType: keyof DewanPenaltyCorner };
         const val = state.dewanPenalties[sudut][penaltyType];
         
-        // Toggle the penalty
         state.dewanPenalties[sudut][penaltyType] = !val;
 
-        // Special case: Disqualification triggers instant fight complete
         if (penaltyType === 'disqualified' && state.dewanPenalties[sudut][penaltyType]) {
-          determineWinner();
+          determineArenaWinner(arena);
         } else {
-          recalculateScores();
+          recalculateArenaScores(arena);
         }
         break;
       }
@@ -944,7 +898,6 @@ app.post('/api/action', (req, res) => {
         state.matchStatus = 'selesai';
         state.timerActive = false;
 
-        // Save to history
         const newHistory: MatchHistory = {
           id: Math.random().toString(36).substring(2),
           namaEvent: state.namaEvent,
@@ -958,11 +911,10 @@ app.post('/api/action', (req, res) => {
           skorAkhirBiru: state.scores.biru.total,
           tanggal: new Date().toISOString()
         };
-        matchHistories.push(newHistory);
+        arena.histories.push(newHistory);
 
-        // Automatically advance winner in brackets if a bracket match is currently loaded!
         if (state.activeBaganCategoryId && state.activeBaganMatchId) {
-          updateBaganWinnerOnServer(state.activeBaganCategoryId, state.activeBaganMatchId, state.winner);
+          updateArenaBaganWinner(arena, state.activeBaganCategoryId, state.activeBaganMatchId, state.winner);
         }
         break;
       }
@@ -972,7 +924,6 @@ app.post('/api/action', (req, res) => {
         state.matchStatus = 'selesai';
         state.timerActive = false;
 
-        // Save to history
         const newHistory: MatchHistory = {
           id: Math.random().toString(36).substring(2),
           namaEvent: state.namaEvent,
@@ -986,11 +937,10 @@ app.post('/api/action', (req, res) => {
           skorAkhirBiru: state.scores.biru.total,
           tanggal: new Date().toISOString()
         };
-        matchHistories.push(newHistory);
+        arena.histories.push(newHistory);
 
-        // Automatically advance winner in brackets if a bracket match is currently loaded!
         if (state.activeBaganCategoryId && state.activeBaganMatchId) {
-          updateBaganWinnerOnServer(state.activeBaganCategoryId, state.activeBaganMatchId, state.winner);
+          updateArenaBaganWinner(arena, state.activeBaganCategoryId, state.activeBaganMatchId, state.winner);
         }
         break;
       }
@@ -1000,7 +950,6 @@ app.post('/api/action', (req, res) => {
         state.matchStatus = 'selesai';
         state.timerActive = false;
 
-        // Save to history
         const newHistory: MatchHistory = {
           id: Math.random().toString(36).substring(2),
           namaEvent: state.namaEvent,
@@ -1014,20 +963,18 @@ app.post('/api/action', (req, res) => {
           skorAkhirBiru: state.scores.biru.total,
           tanggal: new Date().toISOString()
         };
-        matchHistories.push(newHistory);
+        arena.histories.push(newHistory);
 
         if (state.activeBaganCategoryId && state.activeBaganMatchId) {
-          updateBaganWinnerOnServer(state.activeBaganCategoryId, state.activeBaganMatchId, state.winner);
+          updateArenaBaganWinner(arena, state.activeBaganCategoryId, state.activeBaganMatchId, state.winner);
         }
         break;
       }
       case 'DEWAN_UNDO': {
         const { sudut } = payload as { sudut: 'merah' | 'biru' };
-        // 1. If directPoints > 0, decrease Jatuhan
         if (state.directPoints[sudut] > 0) {
           state.directPoints[sudut] = Math.max(0, state.directPoints[sudut] - 3);
         } else {
-          // 2. Otherwise toggle off the last active penalty
           const pen = state.dewanPenalties[sudut];
           if (pen.disqualified) pen.disqualified = false;
           else if (pen.peringatan2) pen.peringatan2 = false;
@@ -1037,28 +984,24 @@ app.post('/api/action', (req, res) => {
           else if (pen.binaan2) pen.binaan2 = false;
           else if (pen.binaan1) pen.binaan1 = false;
         }
-        recalculateScores();
+        recalculateArenaScores(arena);
         break;
       }
       case 'DEWAN_JATUHAN': {
         const { sudut } = payload as { sudut: 'merah' | 'biru' };
-        // Directly add 3 points
         state.directPoints[sudut] += 3;
-        
-        // Register standard visual glow
         state.lastValidScore = {
           timestamp: Date.now(),
           sudut,
-          aksi: 'kick' // Treat as kick equivalent visual flash
+          aksi: 'kick'
         };
-        recalculateScores();
+        recalculateArenaScores(arena);
         break;
       }
       case 'DEWAN_BATAL_JATUHAN': {
         const { sudut } = payload as { sudut: 'merah' | 'biru' };
-        // Directly subtract 3 points, protecting from negative values
         state.directPoints[sudut] = Math.max(0, state.directPoints[sudut] - 3);
-        recalculateScores();
+        recalculateArenaScores(arena);
         break;
       }
       case 'DEWAN_VERIFY_TRIGGER': {
@@ -1076,10 +1019,8 @@ app.post('/api/action', (req, res) => {
         if (state.verification.active) {
           state.verification.votes[`juri${juriId}`] = vote;
 
-          // Check if all Judges have voted
           const v = state.verification.votes;
           if (v.juri1 && v.juri2 && v.juri3) {
-            // Count votes to find majority
             const counts = { MERAH: 0, BIRU: 0, TIDAK_SAH: 0 };
             counts[v.juri1]++;
             counts[v.juri2]++;
@@ -1091,7 +1032,6 @@ app.post('/api/action', (req, res) => {
 
             state.verification.result = maj;
             
-            // If verification was Jatuhan and valid for a corner, add Jatuhan points automatically!
             if (state.verification.type === 'JATUHAN') {
               if (maj === 'MERAH') {
                 state.directPoints.merah += 3;
@@ -1099,13 +1039,12 @@ app.post('/api/action', (req, res) => {
                 state.directPoints.biru += 3;
               }
             }
-            recalculateScores();
+            recalculateArenaScores(arena);
           }
         }
         break;
       }
       case 'DEWAN_VERIFY_RESOLVE': {
-        // Clear active verification popup
         state.verification = {
           active: false,
           type: null,
@@ -1115,11 +1054,10 @@ app.post('/api/action', (req, res) => {
         break;
       }
       case 'CLEAR_HISTORY': {
-        matchHistories = [];
+        arena.histories = [];
         break;
       }
       case 'IMPORT_ROSTERS': {
-        // Mass-config rosters
         const rosters = payload.rosters;
         if (rosters && rosters.length > 0) {
           const first = rosters[0];
@@ -1139,7 +1077,7 @@ app.post('/api/action', (req, res) => {
       case 'SEKRETARIS_ADJUST_SCORE': {
         const { sudut, amount } = payload as { sudut: 'merah' | 'biru'; amount: number };
         state.directPoints[sudut] += amount;
-        recalculateScores();
+        recalculateArenaScores(arena);
         break;
       }
       case 'SEKRETARIS_DECLARE_WINNER': {
@@ -1148,7 +1086,6 @@ app.post('/api/action', (req, res) => {
         state.matchStatus = 'selesai';
         state.timerActive = false;
 
-        // Save to history
         const newHistory: MatchHistory = {
           id: Math.random().toString(36).substring(2),
           namaEvent: state.namaEvent,
@@ -1162,11 +1099,10 @@ app.post('/api/action', (req, res) => {
           skorAkhirBiru: state.scores.biru.total,
           tanggal: new Date().toISOString()
         };
-        matchHistories.push(newHistory);
+        arena.histories.push(newHistory);
 
-        // Automatically advance winner in brackets if a bracket match is currently loaded!
         if (state.activeBaganCategoryId && state.activeBaganMatchId) {
-          updateBaganWinnerOnServer(state.activeBaganCategoryId, state.activeBaganMatchId, state.winner);
+          updateArenaBaganWinner(arena, state.activeBaganCategoryId, state.activeBaganMatchId, state.winner);
         }
         break;
       }
@@ -1188,23 +1124,18 @@ app.post('/api/action', (req, res) => {
         }
         
         scheduledList.sort((a, b) => a.num - b.num);
-        
         const currentPartaiNum = parseInt(state.partai.replace(/\D/g, ''), 10) || 1;
         
         if (scheduledList.length > 0) {
-          // Find the index of the scheduled match with the current partai number
           let currentIndex = scheduledList.findIndex(item => item.num === currentPartaiNum);
-          
           let targetIndex = -1;
           if (currentIndex !== -1) {
             targetIndex = currentIndex + offset;
           } else {
-            // If current number is not in scheduled list, find the next or previous
             if (offset > 0) {
               targetIndex = scheduledList.findIndex(item => item.num > currentPartaiNum);
               if (targetIndex === -1) targetIndex = scheduledList.length - 1;
             } else {
-              // Find the last one that is less than current
               for (let i = scheduledList.length - 1; i >= 0; i--) {
                 if (scheduledList[i].num < currentPartaiNum) {
                   targetIndex = i;
@@ -1217,17 +1148,15 @@ app.post('/api/action', (req, res) => {
           
           if (targetIndex >= 0 && targetIndex < scheduledList.length) {
             const selected = scheduledList[targetIndex];
-            
-            // Re-initialize state like LOAD_BAGAN_MATCH
             const existingCategories = state.baganCategories;
             const existingLogos = {
               logoKiri: state.logoKiri,
               logoKanan: state.logoKanan,
               logoTengah: state.logoTengah
             };
-            const init = createInitialState();
-            state = {
-              ...state,
+            const init = createInitialMatchState(arena.info.nama);
+            arena.state = {
+              ...arena.state,
               ...init,
               ...existingLogos,
               baganCategories: existingCategories,
@@ -1240,21 +1169,21 @@ app.post('/api/action', (req, res) => {
               }
             };
             
-            state.partai = selected.num.toString().padStart(2, '0');
-            state.kelas = selected.catName.replace(/\s*\(.*\)/, '');
-            state.gender = selected.gender;
-            state.activeBaganCategoryId = selected.catId;
-            state.activeBaganMatchId = selected.m.id;
-            state.atletMerah = {
+            arena.state.partai = selected.num.toString().padStart(2, '0');
+            arena.state.kelas = selected.catName.replace(/\s*\(.*\)/, '');
+            arena.state.gender = selected.gender;
+            arena.state.activeBaganCategoryId = selected.catId;
+            arena.state.activeBaganMatchId = selected.m.id;
+            arena.state.atletMerah = {
               nama: selected.m.atletMerah.nama || "Sudut Merah",
               kontingen: selected.m.atletMerah.kontingen || "SUDUT MERAH"
             };
-            state.atletBiru = {
+            arena.state.atletBiru = {
               nama: selected.m.atletBiru.nama || "Sudut Biru",
               kontingen: selected.m.atletBiru.kontingen || "SUDUT BIRU"
             };
-            state.timerSeconds = state.selectedWaktu;
-            recalculateScores();
+            arena.state.timerSeconds = arena.state.selectedWaktu;
+            recalculateArenaScores(arena);
           } else {
             const newPartaiNum = Math.max(1, currentPartaiNum + offset);
             state.partai = newPartaiNum.toString().padStart(2, '0');
@@ -1273,19 +1202,49 @@ app.post('/api/action', (req, res) => {
         tgrState.partai = payload.partai || tgrState.partai;
         tgrState.babak = payload.babak || tgrState.babak;
         tgrState.jumlahJuri = payload.jumlahJuri || tgrState.jumlahJuri;
+        if (payload.sistemSeni) {
+          tgrState.sistemSeni = payload.sistemSeni;
+        }
+        if (payload.jumlahPesertaPerPartai) {
+          tgrState.jumlahPesertaPerPartai = payload.jumlahPesertaPerPartai;
+        }
         if (payload.selectedWaktu) {
           tgrState.selectedWaktu = payload.selectedWaktu;
         }
-        recalculateTGRScores();
+        recalculateArenaTGRScores(arena);
+        break;
+      }
+      case 'TGR_SET_SISTEM_SENI': {
+        tgrState.sistemSeni = payload.sistem || payload.sistemSeni || 'pool';
+        recalculateArenaTGRScores(arena);
+        break;
+      }
+      case 'TGR_SET_ACTIVE_VS_MATCH': {
+        tgrState.activeVSMatch = payload.match;
+        if (payload.match?.partai) {
+          tgrState.partai = payload.match.partai;
+        }
+        if (payload.match?.round) {
+          tgrState.babak = payload.match.round;
+        }
+        if (payload.match?.activeSudut) {
+          const pId = payload.match.activeSudut === 'merah' 
+            ? payload.match.merahPesertaId 
+            : payload.match.biruPesertaId;
+          if (pId) {
+            tgrState.activePesertaId = pId;
+          }
+        }
+        recalculateArenaTGRScores(arena);
         break;
       }
       case 'TGR_SET_ACTIVE_PESERTA': {
         tgrState.activePesertaId = payload.pesertaId;
         const activeP = tgrState.pesertaList.find(p => p.id === payload.pesertaId);
         if (activeP) {
-          tgrState.partai = `PARTAI ${activeP.noUrut}`;
+          tgrState.partai = activeP.partai || `PARTAI ${activeP.partaiNumber || activeP.noUrut}`;
         }
-        recalculateTGRScores();
+        recalculateArenaTGRScores(arena);
         break;
       }
       case 'TGR_UPDATE_PESERTA': {
@@ -1295,6 +1254,12 @@ app.post('/api/action', (req, res) => {
           tgrState.pesertaList.push({
             id: peserta.id || Math.random().toString(36).substring(2),
             noUrut: newNoUrut,
+            noUndian: peserta.noUndian || newNoUrut,
+            partai: peserta.partai || `PARTAI ${peserta.partaiNumber || newNoUrut}`,
+            partaiNumber: peserta.partaiNumber || newNoUrut,
+            pool: peserta.pool || `Pool A`,
+            gender: peserta.gender || 'Putra',
+            usia: peserta.usia || 'Dewasa',
             nama: peserta.nama,
             kontingen: peserta.kontingen,
             kategori: peserta.kategori || "Tunggal",
@@ -1310,7 +1275,7 @@ app.post('/api/action', (req, res) => {
           });
           if (!tgrState.activePesertaId) {
             tgrState.activePesertaId = peserta.id || null;
-            tgrState.partai = `PARTAI ${newNoUrut}`;
+            tgrState.partai = peserta.partai || `PARTAI ${peserta.partaiNumber || newNoUrut}`;
           }
         } else if (action === 'edit') {
           const idx = tgrState.pesertaList.findIndex(p => p.id === peserta.id);
@@ -1319,8 +1284,8 @@ app.post('/api/action', (req, res) => {
               ...tgrState.pesertaList[idx],
               ...peserta
             };
-            if (tgrState.activePesertaId === peserta.id && peserta.noUrut !== undefined) {
-              tgrState.partai = `PARTAI ${peserta.noUrut}`;
+            if (tgrState.activePesertaId === peserta.id) {
+              tgrState.partai = peserta.partai || `PARTAI ${peserta.partaiNumber || peserta.noUrut}`;
             }
           }
         } else if (action === 'delete') {
@@ -1331,13 +1296,19 @@ app.post('/api/action', (req, res) => {
           if (tgrState.activePesertaId) {
             const activeP = tgrState.pesertaList.find(p => p.id === tgrState.activePesertaId);
             if (activeP) {
-              tgrState.partai = `PARTAI ${activeP.noUrut}`;
+              tgrState.partai = activeP.partai || `PARTAI ${activeP.partaiNumber || activeP.noUrut}`;
             }
           }
         } else if (action === 'sync_list') {
           tgrState.pesertaList = payload.pesertaList.map((p: any, idx: number) => ({
             id: p.id || Math.random().toString(36).substring(2),
             noUrut: p.noUrut || (idx + 1),
+            noUndian: p.noUndian !== undefined ? p.noUndian : (idx + 1),
+            partai: p.partai || `PARTAI ${p.partaiNumber || idx + 1}`,
+            partaiNumber: p.partaiNumber !== undefined ? p.partaiNumber : (idx + 1),
+            pool: p.pool || `Pool A`,
+            gender: p.gender || 'Putra',
+            usia: p.usia || 'Dewasa',
             nama: p.nama,
             kontingen: p.kontingen,
             kategori: p.kategori || "Tunggal",
@@ -1355,11 +1326,11 @@ app.post('/api/action', (req, res) => {
           if (tgrState.activePesertaId) {
             const activeP = tgrState.pesertaList.find(p => p.id === tgrState.activePesertaId);
             if (activeP) {
-              tgrState.partai = `PARTAI ${activeP.noUrut}`;
+              tgrState.partai = activeP.partai || `PARTAI ${activeP.partaiNumber || activeP.noUrut}`;
             }
           }
         }
-        recalculateTGRScores();
+        recalculateArenaTGRScores(arena);
         break;
       }
       case 'TGR_SUBMIT_JURI_SCORE': {
@@ -1389,11 +1360,10 @@ app.post('/api/action', (req, res) => {
               peserta.finalizedJuries.push(juriId);
             }
           } else {
-            // If they are live updating, make sure they are not marked as finalized
             peserta.finalizedJuries = peserta.finalizedJuries.filter(id => id !== juriId);
           }
 
-          recalculateTGRScores();
+          recalculateArenaTGRScores(arena);
         }
         break;
       }
@@ -1406,7 +1376,7 @@ app.post('/api/action', (req, res) => {
           if (dewanDecisionScore !== undefined) peserta.dewanDecisionScore = dewanDecisionScore;
           if (waktuTampil !== undefined) peserta.waktuTampil = waktuTampil;
           if (deductionReasons !== undefined) peserta.deductionReasons = deductionReasons;
-          recalculateTGRScores();
+          recalculateArenaTGRScores(arena);
         }
         break;
       }
@@ -1436,7 +1406,7 @@ app.post('/api/action', (req, res) => {
           const peserta = tgrState.pesertaList.find(p => p.id === corr.pesertaId);
           if (peserta) {
             peserta.scores[juriId] = corr.requested;
-            recalculateTGRScores();
+            recalculateArenaTGRScores(arena);
           }
         }
         break;
@@ -1459,7 +1429,7 @@ app.post('/api/action', (req, res) => {
           peserta.deductions = 0;
           peserta.decisions = [];
           peserta.dewanDecisionScore = 0;
-          recalculateTGRScores();
+          recalculateArenaTGRScores(arena);
         }
         break;
       }
@@ -1477,7 +1447,7 @@ app.post('/api/action', (req, res) => {
           const activeP = tgrState.pesertaList.find(p => p.id === tgrState.activePesertaId);
           if (activeP) {
             activeP.waktuTampil = tgrState.timerSeconds;
-            recalculateTGRScores();
+            recalculateArenaTGRScores(arena);
           }
         }
         break;
@@ -1493,7 +1463,7 @@ app.post('/api/action', (req, res) => {
           const activeP = tgrState.pesertaList.find(p => p.id === tgrState.activePesertaId);
           if (activeP) {
             activeP.waktuTampil = payload.seconds;
-            recalculateTGRScores();
+            recalculateArenaTGRScores(arena);
           }
         }
         break;
@@ -1515,7 +1485,16 @@ app.post('/api/action', (req, res) => {
     }
 
     broadcastState();
-    res.json({ success: true, state, tgrState });
+    res.json({
+      success: true,
+      state,
+      tgrState,
+      histories: arena.histories,
+      arenaId: arena.info.id,
+      arenasList: getArenasList(),
+      allArenasSummary: getArenasSummary(),
+      arenas: getArenasMapData()
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -1523,15 +1502,17 @@ app.post('/api/action', (req, res) => {
 
 // History download route as JSON/CSV
 app.get('/api/history/download', (req, res) => {
-  // Let's generate a beautiful formatted CSV document
-  let csv = 'No,Tanggal,Nama Event,Partai,Kelas,Gender,Atlet Merah,Skor Merah,Skor Biru,Atlet Biru,Pemenang\n';
-  matchHistories.forEach((h, index) => {
+  const reqArena = (req.query.arena as string) || 'arena_1';
+  const arena = getArena(reqArena);
+
+  let csv = 'No,Tanggal,Gelanggang,Nama Event,Partai,Kelas,Gender,Atlet Merah,Skor Merah,Skor Biru,Atlet Biru,Pemenang\n';
+  arena.histories.forEach((h, index) => {
     const winnerName = h.winner === 'merah' ? h.atletMerah.nama : h.winner === 'biru' ? h.atletBiru.nama : 'Seri';
-    csv += `${index + 1},"${h.tanggal}","${h.namaEvent}","${h.partai}","${h.kelas}","${h.gender}","${h.atletMerah.nama} (${h.atletMerah.kontingen})",${h.skorAkhirMerah},${h.skorAkhirBiru},"${h.atletBiru.nama} (${h.atletBiru.kontingen})","${winnerName}"\n`;
+    csv += `${index + 1},"${h.tanggal}","${arena.info.nama}","${h.namaEvent}","${h.partai}","${h.kelas}","${h.gender}","${h.atletMerah.nama} (${h.atletMerah.kontingen})",${h.skorAkhirMerah},${h.skorAkhirBiru},"${h.atletBiru.nama} (${h.atletBiru.kontingen})","${winnerName}"\n`;
   });
 
   res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', 'attachment; filename=silat_match_history.csv');
+  res.setHeader('Content-Disposition', `attachment; filename=silat_match_history_${arena.info.id}.csv`);
   res.send(csv);
 });
 

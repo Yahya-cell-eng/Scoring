@@ -56,6 +56,8 @@ export interface BaganMatch {
   atletMerah: Athlete;
   atletBiru: Athlete;
   winner: 'merah' | 'biru' | null;
+  gelanggang?: string;
+  arenaId?: string;
 }
 
 export interface BaganCategory {
@@ -66,10 +68,13 @@ export interface BaganCategory {
   matches: BaganMatch[];
   kelas?: string;
   usia?: string;
+  gelanggang?: string;
+  arenaId?: string;
 }
 
 export interface MatchState {
   namaEvent: string;
+  gelanggang?: string;
   partai: string;
   kelas: string;
   gender: 'Putra' | 'Putri';
@@ -129,9 +134,31 @@ export interface MatchState {
   activeBaganMatchId?: number | null;
 }
 
+export interface TGRPartaiPool {
+  id: string;
+  partai: string; // e.g. "Partai 01" or "Partai 1"
+  partaiNumber: number; // e.g. 1
+  kategori: string; // e.g. "Tunggal", "Ganda", "Regu", "Solo Kreatif"
+  gender?: 'Putra' | 'Putri';
+  usia?: string; // e.g. "Usia Dini", "Pra Remaja", "Remaja", "Dewasa"
+  poolName?: string; // e.g. "Pool A", "Pool B", "Final"
+  babak?: string; // e.g. "Penyisihan", "Semi Final", "Final"
+  pesertaIds: string[]; // List of participant IDs in this match/pool (3, 4, or more)
+  status?: 'terjadwal' | 'live' | 'selesai';
+}
+
 export interface TGRPeserta {
   id: string;
   noUrut: number;
+  noUndian?: number; // No undian / nomor urut tampil dalam partai (1, 2, 3, 4...)
+  partai?: string; // e.g. "Partai 01" or "Partai 1"
+  partaiNumber?: number; // e.g. 1
+  pool?: string; // e.g. "Pool A", "Pool B", "Final"
+  poolName?: string; // e.g. "Pool A", "Pool B", "Final"
+  isFinalPool?: boolean;
+  sudut?: 'merah' | 'biru'; // For Prestasi (VS) mode
+  gender?: 'Putra' | 'Putri';
+  usia?: string; // e.g. "Remaja", "Dewasa"
   nama: string;
   kontingen: string;
   kategori: string;
@@ -145,6 +172,8 @@ export interface TGRPeserta {
   deductionReasons?: string[]; // Array of checked 0.50 reasons
   finalScore?: number;
   ranking?: number;
+  rankingInPartai?: number; // Ranking specifically inside this partai/pool
+  rankingInPool?: number; // Ranking inside its assigned pool
   dewanDecisionScore?: number; // secondary tie breaker manually adjusted by dewan if exact tie
   waktuTampil?: number; // performance time in seconds
   finalizedJuries?: string[]; // list of juri IDs that have finalized their scores
@@ -155,8 +184,21 @@ export interface TGRState {
   gelanggang: string;
   partai?: string;
   babak?: string;
+  sistemSeni?: 'pool' | 'prestasi'; // 'pool' = Ranking Nilai per Pool, 'prestasi' = Head-to-Head VS Bagan Gugur
   activePesertaId: string | null;
+  activePartaiId?: string | null;
+  activeVSMatch?: {
+    partai: string;
+    round: string;
+    categoryName?: string;
+    merahPesertaId?: string;
+    biruPesertaId?: string;
+    activeSudut?: 'merah' | 'biru';
+    winner?: 'merah' | 'biru' | null;
+  };
   pesertaList: TGRPeserta[];
+  partaiPoolList?: TGRPartaiPool[];
+  jumlahPesertaPerPartai?: number; // default 3 or 4 or custom per partai
   jumlahJuri: number; // 4 to 10
   sessionStatus: 'open' | 'closed';
   timerActive: boolean;
@@ -171,5 +213,52 @@ export interface TGRState {
       status: 'pending' | 'approved' | 'rejected';
     };
   };
+  logoKanan?: string | null;
+  logoKiri?: string | null;
+  logoTengah?: string | null;
+}
+
+export interface GelanggangInfo {
+  id: string; // e.g. "arena_1", "arena_2", "arena_3"
+  nama: string; // e.g. "Gelanggang 1" or "Gelanggang A"
+  kode: string; // e.g. "1" or "A"
+  keterangan?: string; // e.g. "Matras A - Hall Utama"
+  modeAktif?: 'tanding' | 'seni';
+  status?: 'aktif' | 'istirahat' | 'selesai';
+  createdAt?: string;
+}
+
+export interface ArenaSummary {
+  id: string;
+  nama: string;
+  kode: string;
+  keterangan?: string;
+  modeAktif: 'tanding' | 'seni';
+  status: 'aktif' | 'istirahat' | 'selesai';
+  // Tanding stats
+  tandingPartai?: string;
+  tandingBabak?: number;
+  tandingKelas?: string;
+  tandingMerahNama?: string;
+  tandingMerahKontingen?: string;
+  tandingMerahSkor?: number;
+  tandingBiruNama?: string;
+  tandingBiruKontingen?: string;
+  tandingBiruSkor?: number;
+  tandingTimerActive?: boolean;
+  tandingTimerSeconds?: number;
+  tandingMatchStatus?: string;
+  tandingWinner?: 'merah' | 'biru' | null;
+  // Seni stats
+  seniPartai?: string;
+  seniBabak?: string;
+  seniKategori?: string;
+  seniActivePesertaNama?: string;
+  seniActivePesertaKontingen?: string;
+  seniActivePesertaSkor?: number;
+  seniTimerActive?: boolean;
+  seniTimerSeconds?: number;
+  totalPesertaSeni?: number;
+  totalHistories?: number;
 }
 

@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { MatchHistory, TGRPeserta, TGRState, MatchState } from '../types';
 import { playBeep } from '../utils/sound';
+import GoogleSheetsIntegrationModal from './GoogleSheetsIntegrationModal';
 
 interface RekapitulasiSkorProps {
   histories?: MatchHistory[];
@@ -48,6 +49,7 @@ export default function RekapitulasiSkor({
   const [selectedKontingenFilter, setSelectedKontingenFilter] = useState<string>('semua');
   const [expandedKontingen, setExpandedKontingen] = useState<string | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<{ type: 'tanding' | 'seni'; data: any } | null>(null);
+  const [showSheetsModal, setShowSheetsModal] = useState(false);
 
   // Fallback to tgrState.pesertaList if tgrPeserta prop not passed directly
   const effectiveTgrPeserta = useMemo(() => {
@@ -491,8 +493,20 @@ export default function RekapitulasiSkor({
             </p>
           </div>
 
-          {/* Action Buttons: Export & Print */}
+          {/* Action Buttons: Export & Print & Google Sheets */}
           <div className="flex items-center gap-2.5 shrink-0">
+            <button
+              onClick={() => {
+                playBeep('click');
+                setShowSheetsModal(true);
+              }}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[10px] font-mono font-black tracking-wider uppercase transition-all shadow-md flex items-center gap-2 cursor-pointer active:scale-95 border border-emerald-400/40"
+              title="Hubungkan & Sinkronkan Hasil Pertandingan ke Google Sheets"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+              <span>GOOGLE SHEETS</span>
+            </button>
+
             <button
               onClick={handleExportCSV}
               className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-amber-500/30 text-amber-300 hover:text-white text-[10px] font-mono font-black tracking-wider uppercase transition-all shadow-md flex items-center gap-2 cursor-pointer active:scale-95"
@@ -1285,6 +1299,12 @@ export default function RekapitulasiSkor({
           </div>
         )}
       </AnimatePresence>
+
+      {/* Google Sheets Modal */}
+      <GoogleSheetsIntegrationModal
+        isOpen={showSheetsModal}
+        onClose={() => setShowSheetsModal(false)}
+      />
 
     </div>
   );

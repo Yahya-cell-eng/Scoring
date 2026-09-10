@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { MatchState } from '../types';
 import { playBeep } from '../utils/sound';
+import ThemePaletteSelector from './ThemePaletteSelector';
+import AnimatedScore from './AnimatedScore';
 
 interface DewanPanelProps {
   state: MatchState;
@@ -309,6 +311,9 @@ export default function DewanPanel({ state, dispatch, onBack, theme, onToggleThe
           >
             {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
           </button>
+
+          <ThemePaletteSelector compact={true} />
+
           <button
             onClick={toggleFullscreen}
             className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
@@ -349,8 +354,8 @@ export default function DewanPanel({ state, dispatch, onBack, theme, onToggleThe
         <div className="col-span-5 bg-gradient-to-r from-red-600 via-red-650 to-red-700 text-white p-2.5 rounded-2xl shadow-md border border-red-500/30 flex flex-col justify-center min-h-[64px]">
           <div className="flex justify-between items-center">
             <span className="text-[9px] font-black uppercase tracking-widest text-red-200">SUDUT MERAH</span>
-            <span className="text-[10px] font-mono font-bold bg-black/25 px-2 py-0.5 rounded-full border border-white/20">
-              SKOR: {state.scores.merah.total}
+            <span className="text-[10px] font-mono font-bold bg-black/25 px-2 py-0.5 rounded-full border border-white/20 inline-flex items-center gap-1">
+              SKOR: <AnimatedScore value={state.scores.merah.total} showDeltaBadge={true} badgeClassName="top-[-10px] right-[-10px]" />
             </span>
           </div>
           <h2 className="text-sm md:text-base font-black truncate uppercase tracking-tight mt-0.5">
@@ -399,8 +404,8 @@ export default function DewanPanel({ state, dispatch, onBack, theme, onToggleThe
         {/* Sudut Biru Banner (Right) */}
         <div className="col-span-5 bg-gradient-to-r from-blue-700 via-blue-650 to-blue-600 text-white p-2.5 rounded-2xl shadow-md border border-blue-500/30 flex flex-col justify-center min-h-[64px] text-right">
           <div className="flex justify-between items-center">
-            <span className="text-[10px] font-mono font-bold bg-black/25 px-2 py-0.5 rounded-full border border-white/20">
-              SKOR: {state.scores.biru.total}
+            <span className="text-[10px] font-mono font-bold bg-black/25 px-2 py-0.5 rounded-full border border-white/20 inline-flex items-center gap-1">
+              SKOR: <AnimatedScore value={state.scores.biru.total} showDeltaBadge={true} badgeClassName="top-[-10px] left-[-10px]" />
             </span>
             <span className="text-[9px] font-black uppercase tracking-widest text-blue-200">SUDUT BIRU</span>
           </div>

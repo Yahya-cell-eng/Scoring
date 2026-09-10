@@ -13,12 +13,18 @@ import { QRCodeSVG } from 'qrcode.react';
 import { MatchState, MatchHistory, BaganCategory, BaganMatch } from '../types';
 import { jsPDF } from 'jspdf';
 import { playBeep } from '../utils/sound';
+import { generateMatchReportPdf } from '../utils/generateMatchReportPdf';
+import sekretarisImg from '../assets/images/sekretaris_panel_1782782300726.jpg';
 import BaganTab from './BaganTab';
 import JadwalTab from './JadwalTab';
 import RegistrasiDataPanel from './RegistrasiDataPanel';
+import ThemePaletteSelector from './ThemePaletteSelector';
+import SekretarisSeniMultiPesertaPanel from './SekretarisSeniMultiPesertaPanel';
+import { TGRState } from '../types';
 
 interface SekretarisPanelProps {
   state: MatchState;
+  tgrState?: TGRState | null;
   histories: MatchHistory[];
   dispatch: (type: string, payload?: any) => Promise<any>;
   onBack: () => void;
@@ -26,7 +32,7 @@ interface SekretarisPanelProps {
   onToggleTheme: () => void;
 }
 
-export default function SekretarisPanel({ state, histories, dispatch, onBack, theme, onToggleTheme }: SekretarisPanelProps) {
+export default function SekretarisPanel({ state, tgrState, histories, dispatch, onBack, theme, onToggleTheme }: SekretarisPanelProps) {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
@@ -48,8 +54,8 @@ export default function SekretarisPanel({ state, histories, dispatch, onBack, th
   };
 
   const [showRegistrasiPage, setShowRegistrasiPage] = useState(false);
-  // Navigation inside panel: "config", "control", "all" (Combined Mode), "jadwal" (Cetak Jadwal PDF)
-  const [activeTab, setActiveTab ] = useState<'config' | 'control' | 'all' | 'jadwal'>('all');
+  // Navigation inside panel: "config", "control", "jadwal" (Cetak Jadwal PDF), "seni" (Manajemen Seni Pool)
+  const [activeTab, setActiveTab ] = useState<'config' | 'control' | 'jadwal' | 'seni'>('control');
 
   const [showNextBabakConfirm, setShowNextBabakConfirm ] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
@@ -359,224 +365,7 @@ export default function SekretarisPanel({ state, histories, dispatch, onBack, th
 
   const handleExportPDF = () => {
     playBeep('click');
-    const doc = new jsPDF('p', 'mm', 'a4');
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    
-    let currentY = 18;
-    
-    // Draw outer borders
-    doc.setDrawColor(30, 41, 59); // slate-800
-    doc.setLineWidth(0.8);
-    doc.rect(8, 8, pageWidth - 16, pageHeight - 16);
-    
-    // Title
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(15);
-    doc.setTextColor(15, 23, 42); // slate-900
-    doc.text("DOKUMEN RESMI HASIL SKORING PERTANDINGAN", pageWidth / 2, currentY, { align: "center" });
-    currentY += 6;
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.5);
-    doc.setTextColor(71, 85, 105); // slate-600
-    doc.text("IKATAN PENCAK SILAT INDONESIA - SECERTARY MATCH CONTROL", pageWidth / 2, currentY, { align: "center" });
-    currentY += 6;
-    
-    // Double decorative divider line
-    doc.setDrawColor(203, 213, 225); // slate-300
-    doc.setLineWidth(0.4);
-    doc.line(12, currentY, pageWidth - 12, currentY);
-    doc.line(12, currentY + 0.8, pageWidth - 12, currentY + 0.8);
-    currentY += 8;
-    
-    // Metadata Header Info Panel
-    doc.setFillColor(248, 250, 252); // slate-50
-    doc.setDrawColor(226, 232, 240);
-    doc.rect(12, currentY, pageWidth - 24, 20, "FD");
-    
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(9.5);
-    doc.setTextColor(15, 23, 42);
-    doc.text(`NAMA EVENT / CHAMPIONSHIP :`, 16, currentY + 6);
-    doc.setFont("helvetica", "normal");
-    doc.text(`${state.namaEvent || 'Kejuaraan Pencak Silat Digital'}`, 70, currentY + 6);
-    
-    doc.setFont("helvetica", "bold");
-    doc.text(`WAKTU CETAK DOKUMEN       :`, 16, currentY + 13);
-    doc.setFont("helvetica", "normal");
-    doc.text(`${new Date().toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' })} WIB`, 70, currentY + 13);
-    currentY += 26;
-
-    // A. Current match data (if running/paused/completed/ongoing)
-    if (state.partai) {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.setTextColor(15, 23, 42);
-      doc.text("A. DETAIL SKOR PERTANDINGAN AKTIF / TERAKHIR", 12, currentY);
-      currentY += 5;
-
-      // Outer table border for active match
-      doc.setDrawColor(148, 163, 184); // slate-400
-      doc.setFillColor(255, 255, 255);
-      doc.rect(12, currentY, pageWidth - 24, 45, "FD");
-
-      // Draw match header label
-      doc.setFillColor(15, 23, 42);
-      doc.rect(12, currentY, pageWidth - 24, 8, "F");
-      
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(255, 255, 255);
-      doc.text(`PARTAI ${state.partai} - KELAS ${state.kelas} (${state.gender.toUpperCase()})`, 16, currentY + 5.5);
-      doc.text(`STATUS: ${state.matchStatus.toUpperCase()}`, pageWidth - 16, currentY + 5.5, { align: "right" });
-
-      currentY += 8;
-
-      // Details columns
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(220, 38, 38); // Red
-      doc.text("SUDUT MERAH", 16, currentY + 6);
-      
-      doc.setTextColor(37, 99, 235); // Blue
-      doc.text("SUDUT BIRU", pageWidth - 16, currentY + 6, { align: "right" });
-
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(51, 65, 85);
-      doc.setFontSize(9.5);
-      // Names
-      doc.text(`${state.atletMerah.nama}`, 16, currentY + 12);
-      doc.text(`${state.atletBiru.nama}`, pageWidth - 16, currentY + 12, { align: "right" });
-      // Contingents
-      doc.setFontSize(8.5);
-      doc.text(`Kontingen: ${state.atletMerah.kontingen}`, 16, currentY + 17);
-      doc.text(`Kontingen: ${state.atletBiru.kontingen}`, pageWidth - 16, currentY + 17, { align: "right" });
-
-      // Divider line
-      doc.setDrawColor(226, 232, 240);
-      doc.line(16, currentY + 21, pageWidth - 16, currentY + 21);
-
-      // Rounds breakdown score label
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(15, 23, 42);
-      doc.text("RINCIAN SKOR TIAP BABAK:", 16, currentY + 26);
-
-      // Score display comparison
-      doc.setFontSize(9.5);
-      doc.setTextColor(220, 38, 38);
-      doc.text(`Babak 1: ${state.scores.merah.babak1} | Babak 2: ${state.scores.merah.babak2} | Babak 3: ${state.scores.merah.babak3}`, 16, currentY + 31);
-      
-      doc.setTextColor(37, 99, 235);
-      doc.text(`Babak 1: ${state.scores.biru.babak1} | Babak 2: ${state.scores.biru.babak2} | Babak 3: ${state.scores.biru.babak3}`, pageWidth - 16, currentY + 31, { align: "right" });
-
-      // Total final comparison
-      doc.setDrawColor(226, 232, 240);
-      doc.line(16, currentY + 34, pageWidth - 16, currentY + 34);
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10.5);
-      doc.setTextColor(220, 38, 38);
-      doc.text(`SKOR AKHIR: ${state.scores.merah.total}`, 16, currentY + 39.5);
-
-      doc.setTextColor(15, 23, 42);
-      doc.text("VS", pageWidth / 2, currentY + 39.5, { align: "center" });
-
-      doc.setTextColor(37, 99, 235);
-      doc.text(`SKOR AKHIR: ${state.scores.biru.total}`, pageWidth - 16, currentY + 39.5, { align: "right" });
-
-      currentY += 49;
-    }
-
-    // B. Historical entries
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.setTextColor(15, 23, 42);
-    doc.text("B. RIWAYAT DATA HASIL PERTANDINGAN (HISTORY LOGS)", 12, currentY);
-    currentY += 5;
-
-    // Draw table header
-    doc.setFillColor(30, 41, 59); // slate-800
-    doc.rect(12, currentY, pageWidth - 24, 7.5, "F");
-    
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(255, 255, 255);
-    doc.text("No", 14, currentY + 5);
-    doc.text("Partai", 21, currentY + 5);
-    doc.text("Kelas", 32, currentY + 5);
-    doc.text("Gender", 45, currentY + 5);
-    doc.text("Sudut Merah (Skor)", 60, currentY + 5);
-    doc.text("Sudut Biru (Skor)", 115, currentY + 5);
-    doc.text("Pemenang", 168, currentY + 5);
-    currentY += 7.5;
-
-    // Draw rows
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.setTextColor(51, 65, 85);
-
-    if (histories.length === 0) {
-      doc.setDrawColor(203, 213, 225);
-      doc.rect(12, currentY, pageWidth - 24, 8);
-      doc.text("Belum ada riwayat pertarungan resmi yang tersimpan di database.", pageWidth / 2, currentY + 5.5, { align: "center" });
-      currentY += 8;
-    } else {
-      histories.forEach((h, index) => {
-        if (currentY > pageHeight - 38) {
-          doc.addPage();
-          currentY = 20;
-          doc.setDrawColor(30, 41, 59);
-          doc.setLineWidth(0.8);
-          doc.rect(8, 8, pageWidth - 16, pageHeight - 16);
-        }
-
-        // Zebra striping
-        if (index % 2 === 0) {
-          doc.setFillColor(248, 250, 252);
-          doc.rect(12, currentY, pageWidth - 24, 8, "F");
-        }
-
-        doc.setDrawColor(226, 232, 240);
-        doc.line(12, currentY + 8, pageWidth - 12, currentY + 8);
-
-        doc.setFont("helvetica", "normal");
-        doc.setTextColor(51, 65, 85);
-        doc.text((index + 1).toString(), 14, currentY + 5.5);
-        doc.text(h.partai, 21, currentY + 5.5);
-        doc.text(h.kelas, 32, currentY + 5.5);
-        doc.text(h.gender === 'Putra' ? 'PA' : 'PI', 45, currentY + 5.5);
-        doc.text(`${h.atletMerah.nama} (${h.skorAkhirMerah})`, 60, currentY + 5.5);
-        doc.text(`${h.atletBiru.nama} (${h.skorAkhirBiru})`, 115, currentY + 5.5);
-
-        const winLabel = h.winner === 'merah' ? 'MERAH' : h.winner === 'biru' ? 'BIRU' : 'SERI';
-        const winColor = h.winner === 'merah' ? [220, 38, 38] : h.winner === 'biru' ? [37, 99, 235] : [100, 116, 139];
-        doc.setFont("helvetica", "bold");
-        doc.setTextColor(winColor[0], winColor[1], winColor[2]);
-        doc.text(winLabel, 168, currentY + 5.5);
-        
-        currentY += 8;
-      });
-    }
-
-    // Double check height for Signatures section
-    currentY = Math.max(currentY + 12, pageHeight - 40);
-    
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9.5);
-    doc.setTextColor(51, 65, 85);
-    
-    doc.text("Dewan Hakim / Pertandingan,", 18, currentY);
-    doc.text("Sekretaris Pertandingan,", pageWidth - 68, currentY);
-    
-    doc.line(18, currentY + 16, 68, currentY + 16);
-    doc.line(pageWidth - 68, currentY + 16, pageWidth - 18, currentY + 16);
-    
-    doc.setFont("helvetica", "bold");
-    doc.text("( ________________________ )", 18, currentY + 21);
-    doc.text("( ________________________ )", pageWidth - 68, currentY + 21);
-
-    doc.save(`Dokumen_Resmi_Skoring_Silat_${Date.now()}.pdf`);
+    generateMatchReportPdf(state, histories);
   };
 
   // Watch state change to show "Lanjut ke Babak Selanjutnya" modal dialogue
@@ -642,6 +431,8 @@ export default function SekretarisPanel({ state, histories, dispatch, onBack, th
           >
             {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
           </button>
+
+          <ThemePaletteSelector compact={true} />
           
           <button
             onClick={toggleFullscreen}
@@ -665,9 +456,16 @@ export default function SekretarisPanel({ state, histories, dispatch, onBack, th
           </button>
 
           <div className={`h-4 w-[1px] ${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-300'}`} />
-          <div className="flex items-center gap-1.5">
-            <FileText className="w-4 h-4 text-emerald-400" />
-            <span className={`text-xs font-mono font-black uppercase tracking-wider ${theme === 'dark' ? 'text-slate-200' : 'text-slate-700'}`}>PANEL SEKRETARIS PERTANDINGAN</span>
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-full overflow-hidden border border-purple-500/70 bg-slate-950 flex items-center justify-center p-0.5 shadow-[0_0_10px_rgba(168,85,247,0.4)] shrink-0">
+              <img
+                src={sekretarisImg}
+                alt="Sekretaris Utama"
+                className="w-full h-full object-contain rounded-full"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+            <span className={`text-xs font-mono font-black uppercase tracking-wider ${theme === 'dark' ? 'text-slate-200' : 'text-slate-700'}`}>SEKRETARIS UTAMA &bull; TANDING & SENI</span>
           </div>
         </div>
 
@@ -689,12 +487,6 @@ export default function SekretarisPanel({ state, histories, dispatch, onBack, th
             Registrasi Atlet
           </button>
           <button
-            onClick={() => { playBeep('click'); setActiveTab('all'); }}
-            className={`px-3 py-1 text-xs uppercase font-extrabold cursor-pointer rounded transition-all ${activeTab === 'all' ? 'bg-emerald-600 text-white shadow shadow-emerald-990/40' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            Mode Gabungan
-          </button>
-          <button
             onClick={() => { playBeep('click'); setActiveTab('control'); }}
             className={`px-3 py-1 text-xs uppercase font-extrabold cursor-pointer rounded transition-all ${activeTab === 'control' ? 'bg-emerald-600 text-white shadow shadow-emerald-990/40' : 'text-slate-400 hover:text-slate-600'}`}
           >
@@ -705,6 +497,19 @@ export default function SekretarisPanel({ state, histories, dispatch, onBack, th
             className={`px-3 py-1 text-xs uppercase font-extrabold cursor-pointer rounded transition-all ${activeTab === 'jadwal' ? 'bg-emerald-600 text-white shadow shadow-emerald-990/40' : 'text-slate-400 hover:text-slate-600'}`}
           >
             📅 Cetak Jadwal
+          </button>
+          <div className={`h-4 w-[1px] ${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-300'} mx-0.5`} />
+          <button
+            onClick={() => { playBeep('click'); setActiveTab('seni'); }}
+            className={`px-3 py-1 text-xs uppercase font-black cursor-pointer rounded transition-all flex items-center gap-1.5 ${
+              activeTab === 'seni'
+                ? 'bg-gradient-to-r from-purple-600 via-indigo-600 to-amber-600 text-white shadow-lg shadow-purple-950/50 scale-105'
+                : 'bg-purple-950/30 text-purple-300 border border-purple-800/40 hover:bg-purple-900/40 hover:text-white'
+            }`}
+            title="Pengaturan Seni: 3-4 Peserta per Partai / Sistem Pool"
+          >
+            <span className="text-amber-400">🥋</span>
+            <span>SENI POOL (3-4+ PESERTA)</span>
           </button>
         </div>
 
@@ -1444,597 +1249,19 @@ export default function SekretarisPanel({ state, histories, dispatch, onBack, th
           </div>
 
         </div>
-      ) : activeTab === 'all' ? (
-        
-        /* COMBINED MODE (ALL) - BOTH ATHLETE REGISTRATION & MATCH CONTROL TOGETHER */
-        <div className="grid grid-cols-12 gap-3 flex-1 my-2 min-h-0 overflow-y-auto">
-          
-          {/* LEFT COLUMN: Match Control dashboard (Col 5) */}
-          <div className="col-span-12 lg:col-span-5 flex flex-col gap-3 min-h-0">
-            
-            {/* Giant Timer Section */}
-            <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 text-center relative overflow-hidden shadow-inner">
-              <span className="text-[9px] font-black text-slate-500 uppercase font-mono tracking-widest">DIGITAL SHOCK TIMER</span>
-              
-              <div className="text-[4rem] leading-none font-black text-transparent bg-clip-text bg-gradient-to-b from-teal-405 to-cyan-305 font-mono my-1 tracking-wide filter drop-shadow">
-                {formatTimer(state.timerSeconds)}
-              </div>
-
-              {/* Status indicator */}
-              <div className="inline-flex items-center gap-1.5 bg-slate-900/80 px-2.5 py-1 rounded-full text-[10px] font-mono border border-slate-800 text-slate-305">
-                <span className={`w-2 h-2 rounded-full ${state.timerActive ? 'bg-green-500 animate-ping' : 'bg-amber-500'}`} />
-                <span className="font-bold uppercase">{state.matchStatus}</span>
-              </div>
-            </div>
-
-            {/* Play, Pause, and Reset Controls */}
-            <div className="flex gap-2">
-              <button
-                onClick={toggleTimer}
-                className={`flex-1 py-2.5 cursor-pointer rounded-xl font-bold text-xs uppercase tracking-wider text-white flex items-center justify-center gap-1.5 transition-all shadow ${
-                  state.timerActive 
-                    ? 'bg-amber-600 hover:bg-amber-505 shadow-md shadow-amber-955/20' 
-                    : 'bg-emerald-600 hover:bg-emerald-505 shadow-md shadow-emerald-955/20'
-                }`}
-              >
-                <Play className={`w-3.5 h-3.5 ${state.timerActive ? 'hidden' : 'block'}`} />
-                <span className="text-white font-extrabold text-[10px] md:text-xs">
-                  {state.timerActive ? 'JEDA PERTANDINGAN' : 'MULAI PERTANDINGAN'}
-                </span>
-              </button>
-
-              <button
-                onClick={resetTimer}
-                className="px-4 py-2.5 cursor-pointer bg-slate-900 border border-slate-800 hover:bg-slate-800 rounded-xl text-[10px] md:text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center justify-center gap-1"
-                title="Reset timer ke durasi awal"
-              >
-                <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
-                Reset
-              </button>
-            </div>
-
-            {/* Official Active Round selectors */}
-            <div className="bg-slate-950/40 p-3 rounded-lg border border-slate-805">
-              <span className="block text-[9px] font-mono uppercase font-black text-slate-400 tracking-widest mb-2">PILIH BABAK AKTIF</span>
-              <div className="grid grid-cols-3 gap-1.5">
-                {[1, 2, 3].map((num) => (
-                  <button
-                    key={num}
-                    onClick={() => handleSelectRound(num as any)}
-                    className={`py-1.5 px-3 cursor-pointer text-xs font-black rounded-lg transition-all border ${
-                      state.currentBabak === num 
-                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 border-emerald-450 text-white shadow-md' 
-                        : 'bg-slate-900 border-slate-800 hover:bg-slate-800 text-slate-400'
-                    }`}
-                  >
-                    BABAK {num}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Live Athlete Scores & profiles recap */}
-            <div className="flex flex-col gap-2">
-              <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest font-mono">Laporan Atlet & Skor</span>
-              
-              {/* Sudut Biru live info */}
-              <div className="bg-gradient-to-r from-blue-950/20 via-slate-905 to-slate-905 p-2 rounded border border-blue-900/30 flex justify-between items-center shadow-sm">
-                <div className="truncate max-w-[12rem]">
-                  <span className="text-[7.5px] font-black uppercase text-cyan-405">SUDUT BIRU</span>
-                  <div className="text-xs font-black text-white uppercase truncate">{state.atletBiru.nama}</div>
-                  <div className="text-[9px] text-blue-400 font-mono truncate">{state.atletBiru.kontingen}</div>
-                </div>
-                <div className="text-lg font-mono text-cyan-405 font-black">{state.scores.biru.total}</div>
-              </div>
-
-              {/* Sudut Merah live info */}
-              <div className="bg-gradient-to-r from-red-950/20 via-slate-905 to-slate-905 p-2 rounded border border-red-900/30 flex justify-between items-center shadow-sm">
-                <div className="truncate max-w-[12rem]">
-                  <span className="text-[7.5px] font-black uppercase text-red-500">SUDUT MERAH</span>
-                  <div className="text-xs font-black text-white uppercase truncate">{state.atletMerah.nama}</div>
-                  <div className="text-[9px] text-red-400 font-mono truncate">{state.atletMerah.kontingen}</div>
-                </div>
-                <div className="text-lg font-mono text-red-505 font-black">{state.scores.merah.total}</div>
-              </div>
-            </div>
-
-            {/* PARTAI SELANJUTNYA (NEXT MATCH) */}
-            {nextMatchInfo && (
-              <div className={`p-3 rounded-xl border ${
-                theme === 'dark' 
-                  ? 'bg-slate-950/60 border-slate-900/60' 
-                  : 'bg-white border-slate-200'
-              } shadow-sm`}>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-amber-500 font-mono flex items-center gap-1">
-                    <span>⏭️</span> Partai Selanjutnya
-                  </span>
-                  <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
-                    theme === 'dark' ? 'bg-slate-900 text-slate-300 border-slate-800' : 'bg-slate-100 text-slate-700 border-slate-300'
-                  }`}>
-                    {nextMatchInfo.match.partai}
-                  </span>
-                </div>
-
-                <div className={`text-[11px] font-black truncate mb-2 uppercase text-left ${theme === 'dark' ? 'text-slate-300' : 'text-slate-700'}`}>
-                  {nextMatchInfo.category.name}
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-                  {/* Sudut Merah */}
-                  <div className={`border rounded p-1.5 truncate text-left ${
-                    theme === 'dark' ? 'bg-red-950/15 border-red-900/30' : 'bg-red-50/50 border-red-200/50'
-                  }`}>
-                    <span className="text-[8px] font-black uppercase text-red-500 block">MERAH</span>
-                    <div className={`font-extrabold truncate ${theme === 'dark' ? 'text-slate-100' : 'text-slate-900'}`}>
-                      {nextMatchInfo.match.atletMerah.nama || '................'}
-                    </div>
-                    <div className={`text-[9px] truncate ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
-                      {nextMatchInfo.match.atletMerah.kontingen || '................'}
-                    </div>
-                  </div>
-
-                  {/* Sudut Biru */}
-                  <div className={`border rounded p-1.5 truncate text-left ${
-                    theme === 'dark' ? 'bg-blue-950/15 border-blue-900/30' : 'bg-blue-50/50 border-blue-200/50'
-                  }`}>
-                    <span className="text-[8px] font-black uppercase text-cyan-505 block">BIRU</span>
-                    <div className={`font-extrabold truncate ${theme === 'dark' ? 'text-slate-100' : 'text-slate-900'}`}>
-                      {nextMatchInfo.match.atletBiru.nama || '................'}
-                    </div>
-                    <div className={`text-[9px] truncate ${theme === 'dark' ? 'text-slate-400' : 'text-slate-500'}`}>
-                      {nextMatchInfo.match.atletBiru.kontingen || '................'}
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  onClick={async () => {
-                    playBeep('valid');
-                    const cleanKelas = nextMatchInfo.category.name.replace(/\s*\(.*\)/, '');
-                    await dispatch('LOAD_BAGAN_MATCH', {
-                      namaEvent: state.namaEvent || "Kejuaraan Pencak Silat",
-                      partai: nextMatchInfo.match.partai.replace(/Partai\s+/i, ''),
-                      kelas: cleanKelas,
-                      gender: nextMatchInfo.category.gender,
-                      selectedWaktu: state.selectedWaktu || 120,
-                      activeBaganCategoryId: nextMatchInfo.category.id,
-                      activeBaganMatchId: nextMatchInfo.match.id,
-                      atletMerah: {
-                        nama: nextMatchInfo.match.atletMerah.nama || "Sudut Merah",
-                        kontingen: nextMatchInfo.match.atletMerah.kontingen || "SUDUT MERAH"
-                      },
-                      atletBiru: {
-                        nama: nextMatchInfo.match.atletBiru.nama || "Sudut Biru",
-                        kontingen: nextMatchInfo.match.atletBiru.kontingen || "SUDUT BIRU"
-                      }
-                    });
-                  }}
-                  className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-550 text-white font-extrabold uppercase text-[10px] rounded-lg tracking-wider transition-all active:scale-95 flex items-center justify-center gap-1 cursor-pointer border-0"
-                >
-                  <Play className="w-3 h-3" />
-                  Muat Partai Selanjutnya
-                </button>
-              </div>
-            )}
-
-            {/* Extended Match & Score Control Panel */}
-            <div className="bg-slate-950/80 p-3 rounded-lg border border-slate-800 mt-2.5 flex flex-col gap-2.5 text-left">
-              <span className="block text-[10px] text-emerald-400 font-mono uppercase font-black tracking-widest">KONTROL PARTAI & KOREKSI SEBAGAI SEKRETARIS</span>
-              
-              {/* Row 1: Quick Navigation for Partai Number */}
-              <div className="flex items-center justify-between gap-2 border-b border-slate-900 pb-2">
-                <span className="text-[10px] text-slate-400 font-bold uppercase">Navigasi Partai:</span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => { playBeep('click'); dispatch('SEKRETARIS_ADJUST_PARTAI', { offset: -1 }); }}
-                    className="px-2.5 py-1 text-[10px] font-black uppercase bg-slate-900 border border-slate-800 text-slate-305 hover:bg-slate-800 rounded-md cursor-pointer transition-all"
-                  >
-                    ← P -1
-                  </button>
-                  <span className="text-xs font-mono font-black text-amber-400 px-1.5 self-center">P{state.partai}</span>
-                  <button
-                    onClick={() => { playBeep('click'); dispatch('SEKRETARIS_ADJUST_PARTAI', { offset: 1 }); }}
-                    className="px-2.5 py-1 text-[10px] font-black uppercase bg-slate-900 border border-slate-800 text-slate-305 hover:bg-slate-800 rounded-md cursor-pointer transition-all"
-                  >
-                    P +1 →
-                  </button>
-                </div>
-              </div>
-
-              {/* Row 2: Manual Score Correction Offset */}
-              <div className="grid grid-cols-2 gap-3 border-b border-slate-900 pb-2">
-                {/* Blue Side Adjustment */}
-                <div className="flex flex-col gap-1 text-left">
-                  <span className="text-[8px] font-black uppercase text-cyan-405">Koreksi Skor Biru:</span>
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() => { playBeep('warning'); dispatch('SEKRETARIS_ADJUST_SCORE', { sudut: 'biru', amount: -1 }); }}
-                      className="flex-1 py-1 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/30 text-rose-450 text-[10px] font-black rounded-md cursor-pointer"
-                    >
-                      -1
-                    </button>
-                    <button
-                      onClick={() => { playBeep('valid'); dispatch('SEKRETARIS_ADJUST_SCORE', { sudut: 'biru', amount: 1 }); }}
-                      className="flex-1 py-1 bg-cyan-950/20 hover:bg-cyan-950/40 border border-cyan-900/30 text-cyan-405 text-[10px] font-black rounded-md cursor-pointer"
-                    >
-                      +1
-                    </button>
-                  </div>
-                </div>
-
-                {/* Red Side Adjustment */}
-                <div className="flex flex-col gap-1 text-left">
-                  <span className="text-[8px] font-black uppercase text-red-500">Koreksi Skor Merah:</span>
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() => { playBeep('warning'); dispatch('SEKRETARIS_ADJUST_SCORE', { sudut: 'merah', amount: -1 }); }}
-                      className="flex-1 py-1 bg-rose-950/20 hover:bg-rose-950/40 border border-rose-900/30 text-rose-455 text-[10px] font-black rounded-md cursor-pointer"
-                    >
-                      -1
-                    </button>
-                    <button
-                      onClick={() => { playBeep('valid'); dispatch('SEKRETARIS_ADJUST_SCORE', { sudut: 'merah', amount: 1 }); }}
-                      className="flex-1 py-1 bg-red-955/20 hover:bg-red-955/40 border border-red-900/30 text-red-400 text-[10px] font-black rounded-md cursor-pointer"
-                    >
-                      +1
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Row 3: Declare Direct Decision UD */}
-              <div className="flex flex-col gap-1 text-left">
-                <span className="text-[8px] font-black uppercase text-slate-400 block">Sahkan Keputusan Partai (Direct Win / UD):</span>
-                <div className="grid grid-cols-2 gap-2 mt-1">
-                  <button
-                    onClick={() => {
-                      if (confirm(`Sahkan Kemenangan UD (Undur Diri) untuk Sudut MERAH?`)) {
-                        playBeep('valid');
-                        dispatch('SEKRETARIS_DECLARE_WINNER', { winner: 'merah' });
-                      }
-                    }}
-                    className="py-1 bg-red-955/30 hover:bg-red-900/40 border border-red-900/50 text-red-400 text-[9px] md:text-[10px] font-black uppercase rounded-md cursor-pointer transition-all"
-                  >
-                    Menang UD MERAH
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (confirm(`Sahkan Kemenangan UD (Undur Diri) untuk Sudut BIRU?`)) {
-                        playBeep('valid');
-                        dispatch('SEKRETARIS_DECLARE_WINNER', { winner: 'biru' });
-                      }
-                    }}
-                    className="py-1 bg-blue-955/30 hover:bg-blue-900/40 border border-blue-900/50 text-blue-400 text-[9px] md:text-[10px] font-black uppercase rounded-md cursor-pointer transition-all"
-                  >
-                    Menang UD BIRU
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Complete action: Next partido or reset */}
-            <button
-              onClick={resetOrNextPartai}
-              className="mt-1 py-2 bg-red-950/20 hover:bg-red-900/30 cursor-pointer text-red-400 border border-red-900/40 rounded-lg text-xs font-bold uppercase transition-all text-center"
-            >
-              Reset/Selesaikan Pertandingan Ini
-            </button>
-          </div>
-
-          {/* RIGHT COLUMN: Athlete Registration & Configuration metadata (Col 7) */}
-          <div className="col-span-12 lg:col-span-7 flex flex-col gap-3 min-h-0 bg-slate-900/20 p-3 rounded-lg border border-slate-900">
-            <h4 className="text-[11px] font-black uppercase text-emerald-400 tracking-wider flex items-center gap-1.5 border-b border-slate-800 pb-1.5">
-              <span>●</span> Registrasi Atlet & Data Partai
-            </h4>
-
-            {/* Athlete detail configuration cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {/* SUDUT BIRU FIELD CONFIG */}
-              <div className="bg-gradient-to-b from-blue-950/10 to-slate-900/40 p-2.5 rounded-lg border border-blue-900/15">
-                <span className="text-[9px] font-black uppercase text-cyan-405 tracking-wider font-mono">REGISTRASI SUDUT BIRU</span>
-                <div className="mt-1.5 flex flex-col gap-1.5">
-                  <div>
-                    <label className="block text-[8px] text-slate-500 uppercase font-mono">Nama Atlet</label>
-                    <input 
-                      type="text" 
-                      value={state.atletBiru.nama}
-                      onChange={(e) => handleUpdateAthlete('biru', 'nama', e.target.value)}
-                      className="w-full text-xs bg-slate-900/80 border border-slate-800 px-2 py-1 rounded-md focus:border-blue-500 outline-none font-bold text-white"
-                      placeholder="Nama Lengkap"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[8px] text-slate-500 uppercase font-mono">Kontingen / Pengda</label>
-                    <input 
-                      type="text" 
-                      value={state.atletBiru.kontingen}
-                      onChange={(e) => handleUpdateAthlete('biru', 'kontingen', e.target.value)}
-                      className="w-full text-xs bg-slate-900/80 border border-slate-800 px-2 py-1 rounded-md focus:border-blue-500 outline-none font-bold text-white"
-                      placeholder="Kontingen"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* SUDUT MERAH FIELD CONFIG */}
-              <div className="bg-gradient-to-b from-red-950/10 to-slate-900/40 p-2.5 rounded-lg border border-red-900/15">
-                <span className="text-[9px] font-black uppercase text-red-500 tracking-wider font-mono">REGISTRASI SUDUT MERAH</span>
-                <div className="mt-1.5 flex flex-col gap-1.5">
-                  <div>
-                    <label className="block text-[8px] text-slate-500 uppercase font-mono">Nama Atlet</label>
-                    <input 
-                      type="text" 
-                      value={state.atletMerah.nama}
-                      onChange={(e) => handleUpdateAthlete('merah', 'nama', e.target.value)}
-                      className="w-full text-xs bg-slate-900/80 border border-slate-800 px-2 py-1 rounded-md focus:border-red-500 outline-none font-bold text-white"
-                      placeholder="Nama Lengkap"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[8px] text-slate-500 uppercase font-mono">Kontingen / Pengda</label>
-                    <input 
-                      type="text" 
-                      value={state.atletMerah.kontingen}
-                      onChange={(e) => handleUpdateAthlete('merah', 'kontingen', e.target.value)}
-                      className="w-full text-xs bg-slate-900/80 border border-slate-800 px-2 py-1 rounded-md focus:border-red-500 outline-none font-bold text-white"
-                      placeholder="Kontingen"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {scheduledList.length > 0 && (
-              <div className="bg-slate-950/25 p-2 rounded-lg border border-emerald-950/40">
-                <label className="block text-[9px] text-emerald-450 font-mono uppercase font-bold mb-0.5">📅 PILIH DARI JADWAL PERTANDINGAN</label>
-                <select
-                  value={scheduledList.find(x => x.num === parseInt(state.partai.replace(/\D/g, ''), 10))?.uniqueId || ""}
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      handleSelectScheduledMatch(e.target.value);
-                    }
-                  }}
-                  className="w-full text-xs bg-slate-950 border border-emerald-900/40 focus:border-emerald-500 px-2 py-1.5 rounded-md outline-none text-emerald-400 font-bold font-mono"
-                >
-                  <option value="" className="text-slate-500 bg-slate-950">-- Pilih Partai Terjadwal --</option>
-                  {scheduledList.map(item => (
-                    <option key={item.uniqueId} value={item.uniqueId} className="text-slate-300 bg-slate-950">
-                      P{item.num.toString().padStart(2, '0')} - {item.categoryName.replace(/\s*\(.*\)/, '')} ({item.match.atletMerah.nama || 'TBD'} vs {item.match.atletBiru.nama || 'TBD'})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Core Match Metadata fields */}
-            <div className="bg-slate-950/40 p-2.5 rounded-lg border border-slate-800/60 grid grid-cols-2 md:grid-cols-4 gap-2">
-              <div className="col-span-2 md:col-span-1">
-                <label className="block text-[8px] text-slate-505 font-mono uppercase font-bold mb-0.5">Nama Event</label>
-                <input 
-                  type="text" 
-                  value={state.namaEvent}
-                  onChange={(e) => handleUpdateInfo({ namaEvent: e.target.value })}
-                  className="w-full text-xs bg-slate-900 border border-slate-800 focus:border-emerald-500 px-2 py-1 rounded-md outline-none text-white font-bold"
-                />
-              </div>
-              <div>
-                <label className="block text-[8px] text-slate-505 font-mono uppercase font-bold mb-0.5">Partai No</label>
-                <input 
-                  type="text"
-                  value={state.partai}
-                  onChange={(e) => handleUpdateInfo({ partai: e.target.value })}
-                  className="w-full text-xs bg-slate-900 border border-slate-800 focus:border-emerald-500 px-2 py-1 rounded-md outline-none text-white font-bold font-mono"
-                />
-              </div>
-              <div>
-                <label className="block text-[8px] text-slate-505 font-mono uppercase font-bold mb-0.5">Kelas/Nomor</label>
-                <input 
-                  type="text"
-                  value={state.kelas}
-                  onChange={(e) => handleUpdateInfo({ kelas: e.target.value })}
-                  className="w-full text-xs bg-slate-900 border border-slate-800 focus:border-emerald-500 px-2 py-1 rounded-md outline-none text-white font-bold"
-                />
-              </div>
-              <div>
-                <label className="block text-[8px] text-slate-505 font-mono uppercase font-bold mb-0.5">Gender</label>
-                <div className="grid grid-cols-2 gap-0.5 bg-slate-950 p-0.5 border border-slate-800 rounded-md">
-                  <button
-                    type="button"
-                    onClick={() => { playBeep('click'); handleUpdateInfo({ gender: 'Putra' }); }}
-                    className={`py-0.5 cursor-pointer rounded font-black text-[10px] uppercase ${state.gender === 'Putra' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
-                  >
-                    PA
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { playBeep('click'); handleUpdateInfo({ gender: 'Putri' }); }}
-                    className={`py-0.5 cursor-pointer rounded font-black text-[10px] uppercase ${state.gender === 'Putri' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
-                  >
-                    PI
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Custom Input Durasi Babak & Logo upload row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {/* Stepper block */}
-              <div className="bg-slate-950/30 p-2 rounded-lg border border-slate-800/50 flex flex-col justify-center">
-                <label className="block text-[8px] text-slate-400 font-mono uppercase font-bold mb-1">
-                  Durasi Waktu Babak
-                </label>
-                <div className="flex items-center gap-1.5">
-                  <div className="flex-1 flex gap-1 items-center bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playBeep('click');
-                        const curM = Math.floor(state.selectedWaktu / 60);
-                        const curS = state.selectedWaktu % 60;
-                        const newM = Math.max(0, curM - 1);
-                        handleUpdateInfo({ selectedWaktu: newM * 60 + curS });
-                      }}
-                      className="px-1 text-xs font-black text-slate-400 hover:text-white"
-                    >
-                      -
-                    </button>
-                    <span className="flex-1 text-center font-bold text-xs font-mono">{Math.floor(state.selectedWaktu / 60)}m</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playBeep('click');
-                        const curM = Math.floor(state.selectedWaktu / 60);
-                        const curS = state.selectedWaktu % 60;
-                        const newM = curM + 1;
-                        handleUpdateInfo({ selectedWaktu: newM * 60 + curS });
-                      }}
-                      className="px-1 text-xs font-black text-slate-400 hover:text-white"
-                    >
-                      +
-                    </button>
-                  </div>
-                  <div className="flex-1 flex gap-1 items-center bg-slate-950 border border-slate-800 rounded px-1.5 py-0.5 font-mono">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playBeep('click');
-                        const curM = Math.floor(state.selectedWaktu / 60);
-                        const curS = state.selectedWaktu % 60;
-                        const newS = (curS - 5 + 60) % 60;
-                        handleUpdateInfo({ selectedWaktu: curM * 60 + newS });
-                      }}
-                      className="px-1 text-xs font-black text-slate-400 hover:text-white"
-                    >
-                      -
-                    </button>
-                    <span className="flex-1 text-center font-bold text-xs font-mono">{state.selectedWaktu % 60}s</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playBeep('click');
-                        const curM = Math.floor(state.selectedWaktu / 60);
-                        const curS = state.selectedWaktu % 60;
-                        const newS = (curS + 5) % 60;
-                        handleUpdateInfo({ selectedWaktu: curM * 60 + newS });
-                      }}
-                      className="px-1 text-xs font-black text-slate-400 hover:text-white"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Logo Uploads */}
-              <div className="bg-slate-950/30 p-2 rounded-lg border border-slate-800/50">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="block text-[8px] text-slate-500 font-mono uppercase font-bold">Logo Event</span>
-                  {(state.logoKiri || state.logoKanan || state.logoTengah) && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playBeep('warning');
-                        dispatch('UPLOAD_LOGOS', { logoKiri: null, logoKanan: null, logoTengah: null });
-                      }}
-                      className="text-[8px] text-red-500 hover:text-red-400 font-bold uppercase transition-all"
-                    >
-                      Reset
-                    </button>
-                  )}
-                </div>
-                <div className="grid grid-cols-3 gap-1">
-                  <button
-                    type="button"
-                    onClick={() => { playBeep('click'); fileInputKiriRef.current?.click(); }}
-                    className={`py-1 cursor-pointer hover:bg-slate-800 border text-[8px] uppercase font-bold rounded flex items-center justify-center gap-1 transition-all ${
-                      state.logoKiri ? 'bg-cyan-950/20 border-cyan-800 text-cyan-405' : 'bg-slate-900 border-slate-800 text-slate-400'
-                    }`}
-                  >
-                    <span>L-Kiri</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { playBeep('click'); fileInputTengahRef.current?.click(); }}
-                    className={`py-1 cursor-pointer hover:bg-slate-800 border text-[8px] uppercase font-bold rounded flex items-center justify-center gap-1 transition-all ${
-                      state.logoTengah ? 'bg-amber-955/20 border-amber-805 text-amber-400' : 'bg-slate-900 border-slate-800 text-slate-400'
-                    }`}
-                  >
-                    <span>L-Tengah</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { playBeep('click'); fileInputKananRef.current?.click(); }}
-                    className={`py-1 cursor-pointer hover:bg-slate-800 border text-[8px] uppercase font-bold rounded flex items-center justify-center gap-1 transition-all ${
-                      state.logoKanan ? 'bg-red-955/20 border-red-800 text-red-405' : 'bg-slate-900 border-slate-800 text-slate-400'
-                    }`}
-                  >
-                    <span>L-Kanan</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* CSV Roster Importer */}
-            <div className="p-2 border border-slate-800 bg-slate-900/40 rounded-lg flex items-center justify-between gap-1.5">
-              <span className="text-[9px] font-bold text-slate-400 font-mono uppercase">Mass Roster</span>
-              <div className="flex gap-2">
-                <button
-                  onClick={downloadTemplateCSV}
-                  className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold uppercase rounded-md text-slate-300 flex items-center gap-1 w-auto transition-all"
-                >
-                  <Download className="w-3 h-3" />
-                  Template
-                </button>
-                <label className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-[10px] font-bold uppercase rounded-md text-slate-300 flex items-center gap-1 cursor-pointer w-auto transition-all">
-                  <Upload className="w-3 h-3 text-emerald-450" />
-                  Upload
-                  <input
-                    type="file"
-                    accept=".csv"
-                    onChange={handleImportCSV}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-            </div>
-
-            {/* Match History management */}
-            <div className="p-2 bg-slate-950/20 rounded-lg border border-slate-900 flex items-center justify-between">
-              <span className="text-[9px] font-black uppercase text-slate-400 tracking-wide font-mono">Persisted History ({histories.length})</span>
-              <div className="flex gap-1 font-mono">
-                <button
-                  onClick={handleExportCSV}
-                  className="px-2 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-bold text-[9px] uppercase rounded flex items-center gap-1 cursor-pointer transition-colors"
-                  title="Ekspor CSV"
-                >
-                  <Download className="w-3 h-3" />
-                  CSV
-                </button>
-                <button
-                  onClick={handleExportPDF}
-                  className="px-2 py-1 bg-emerald-950/40 hover:bg-emerald-900/40 border border-emerald-900/40 text-emerald-400 font-bold text-[9px] uppercase rounded flex items-center gap-1 cursor-pointer transition-colors"
-                  title="Cetak PDF"
-                >
-                  <FileText className="w-3 h-3" />
-                  PDF
-                </button>
-                {histories.length > 0 && (
-                  <button 
-                    onClick={clearMatchHistoriesList}
-                    className="px-2 py-1 text-[9px] font-bold text-red-500 hover:text-red-400 flex items-center gap-1 bg-red-955/20 rounded border border-red-900/30 cursor-pointer transition-colors"
-                  >
-                    <Trash2 className="w-3 h-3" /> Hapus
-                  </button>
-                )}
-              </div>
-            </div>
-
-          </div>
-
-        </div>
       ) : activeTab === 'jadwal' ? (
-        <JadwalTab theme={theme} state={state} dispatch={dispatch} />
+        <JadwalTab theme={theme} state={state} tgrState={tgrState} dispatch={dispatch} />
+      ) : activeTab === 'seni' ? (
+        <div className="flex-1 my-2 min-h-0">
+          <SekretarisSeniMultiPesertaPanel
+            tgrState={tgrState || ({} as any)}
+            state={state}
+            dispatch={dispatch}
+            onClose={() => setActiveTab('control')}
+            theme={theme}
+            onToggleTheme={onToggleTheme}
+          />
+        </div>
       ) : null}
 
       {/* 3. Popup Dialogue Modals */}

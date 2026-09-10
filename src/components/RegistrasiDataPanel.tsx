@@ -6,12 +6,22 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  ArrowLeft, Plus, Trash2, Edit2, Download, Upload, Play, Trophy, CheckSquare, Square, RefreshCw, FileText, Save, Users, X
+  ArrowLeft, Plus, Trash2, Edit2, Download, Upload, Play, Trophy, CheckSquare, Square, RefreshCw, FileText, Save, Users, X,
+  Wand2, Copy, Sparkles, CheckCircle2, FileSpreadsheet, FileUp, AlertCircle
 } from 'lucide-react';
 import { MatchState, BaganCategory, BaganMatch, Athlete } from '../types';
 import { playBeep } from '../utils/sound';
 import safeHtml2canvas from '../utils/safeHtml2canvas';
 import { jsPDF } from 'jspdf';
+import { generateSchedulePdf, ScheduleMetadata, ScheduleMatchRow } from '../utils/generateSchedulePdf';
+import { 
+  parseRawAthletesData, 
+  parseExcelFile, 
+  downloadOfficialExcelTemplate, 
+  exportAthletesToExcelFile, 
+  ParsedAthleteRecord 
+} from '../utils/smartDataParser';
+import { distributeAthletesAvoidSameContingent } from '../utils/contingentDrawing';
 
 // Define structure for registered athletes
 interface RegistrasiAthlete {
@@ -227,6 +237,68 @@ export default function RegistrasiDataPanel({ theme, state, dispatch, onClose }:
   const saveAthletesLocal = (newAthletes: RegistrasiAthlete[]) => {
     setAthletes(newAthletes);
     localStorage.setItem('silat_registered_athletes', JSON.stringify(newAthletes));
+  };
+
+  // Smart Auto-Parser States
+  const [showSmartInputModal, setShowSmartInputModal] = useState(false);
+  const [smartInputMode, setSmartInputMode] = useState<'excel' | 'text'>('excel');
+  const [smartRawText, setSmartRawText] = useState('');
+  const [smartParsedList, setSmartParsedList] = useState<ParsedAthleteRecord[]>([]);
+  const [smartExcelLoading, setSmartExcelLoading] = useState(false);
+  const [smartExcelFileName, setSmartExcelFileName] = useState<string | null>(null);
+  const [smartExcelError, setSmartExcelError] = useState<string | null>(null);
+  const smartFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAnalyzeSmartText = (text: string) => {
+    setSmartRawText(text);
+    const parsed = parseRawAthletesData(text);
+    setSmartParsedList(parsed);
+    setSmartExcelFileName(null);
+    setSmartExcelError(null);
+  };
+
+  const handleProcessExcelSmart = async (file: File) => {
+    setSmartExcelLoading(true);
+    setSmartExcelError(null);
+    try {
+      playBeep('click');
+      const parsedRecords = await parseExcelFile(file);
+      if (parsedRecords.length === 0) {
+        setSmartExcelError("File Excel terbaca kosong atau format tidak sesuai. Gunakan template resmi.");
+      } else {
+        setSmartParsedList(parsedRecords);
+        setSmartExcelFileName(file.name);
+        playBeep('valid');
+      }
+    } catch (err: any) {
+      console.error("Gagal membaca Excel:", err);
+      setSmartExcelError(`Gagal membaca file Excel: ${err?.message || 'Format tidak didukung'}`);
+    } finally {
+      setSmartExcelLoading(false);
+    }
+  };
+
+  const handleApplySmartAthletes = () => {
+    if (smartParsedList.length === 0) return;
+    playBeep('valid');
+
+    const newAthletes: RegistrasiAthlete[] = smartParsedList.map((item, idx) => ({
+      id: `ath_${Date.now()}_${idx}_${Math.random().toString(36).substr(2, 4)}`,
+      nama: item.nama,
+      kontingen: item.kontingen,
+      kelas: item.kelas,
+      usia: item.kategoriUsia,
+      gender: item.gender
+    }));
+
+    const merged = [...athletes, ...newAthletes];
+    saveAthletesLocal(merged);
+    rebuildBracketsFromAthletes(merged);
+    setShowSmartInputModal(false);
+    setSmartRawText('');
+    setSmartParsedList([]);
+    setSmartExcelFileName(null);
+    alert(`Berhasil memisahkan & mendaftarkan ${newAthletes.length} atlet secara otomatis ke bagan pertandingan!`);
   };
 
   // Form State for inputting athletes
@@ -1010,12 +1082,9 @@ export default function RegistrasiDataPanel({ theme, state, dispatch, onClose }:
     groups.forEach((groupAthletes, categoryBaseName) => {
       const firstAth = groupAthletes[0];
       
-      // Split into chunks of max participants per bracket based on state settings (pesertaPerBagan)
-      const chunks: RegistrasiAthlete[][] = [];
+      // Split into brackets with guaranteed contingent separation (no same contingent in first round!)
       const sizeLimit = pesertaPerBagan;
-      for (let i = 0; i < groupAthletes.length; i += sizeLimit) {
-        chunks.push(groupAthletes.slice(i, i + sizeLimit));
-      }
+      const chunks: RegistrasiAthlete[][] = distributeAthletesAvoidSameContingent(groupAthletes, sizeLimit as 2 | 4 | 8 | 16);
 
       chunks.forEach((chunkAthletes, chunkIdx) => {
         // Name the category. If there is only 1 chunk, keep the original name.
@@ -1677,75 +1746,364 @@ export default function RegistrasiDataPanel({ theme, state, dispatch, onClose }:
     e.target.value = '';
   };
 
-  // --- PDF REPORT EXPORTERS (Using html2canvas + jsPDF) ---
+  // --- HIGH-PRECISION OFFICIAL IPSI PDF GENERATORS (Pure vector PDF) ---
   const reportPrintAreaRef = useRef<HTMLDivElement>(null);
   const bracketPrintAreaRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
+  // 1. Generate Registered Athletes PDF
+  const generateAthletesRosterPdf = (athletesList: RegistrasiAthlete[], eventName: string, gelanggang: string) => {
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
+    const pageHeight = doc.internal.pageSize.getHeight(); // 297mm
+    const marginX = 12;
+    const contentWidth = pageWidth - marginX * 2; // 186mm
+
+    const rowsPerPage = 20;
+    const totalPages = Math.ceil(Math.max(athletesList.length, 1) / rowsPerPage);
+
+    for (let page = 0; page < totalPages; page++) {
+      if (page > 0) doc.addPage('a4', 'p');
+
+      let currentY = 14;
+
+      // Outer border
+      doc.setDrawColor(15, 23, 42);
+      doc.setLineWidth(0.6);
+      doc.rect(8, 8, pageWidth - 16, pageHeight - 16);
+
+      // Title
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.setTextColor(15, 23, 42);
+      doc.text('DAFTAR PESERTA / ATLET TERDAFTAR RESMI', pageWidth / 2, currentY, { align: 'center' });
+      currentY += 5;
+
+      doc.setFontSize(11);
+      doc.text((eventName || 'KEJUARAAN PENCAK SILAT NASIONAL').toUpperCase(), pageWidth / 2, currentY, { align: 'center' });
+      currentY += 4.5;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(71, 85, 105);
+      doc.text('IKATAN PENCAK SILAT INDONESIA (IPSI) - DIGITAL MATCH COMMISSION', pageWidth / 2, currentY, { align: 'center' });
+      currentY += 4;
+
+      // Divider line
+      doc.setDrawColor(203, 213, 225);
+      doc.setLineWidth(0.4);
+      doc.line(marginX, currentY, marginX + contentWidth, currentY);
+      currentY += 5;
+
+      // Info panel
+      doc.setFillColor(248, 250, 252);
+      doc.setDrawColor(226, 232, 240);
+      doc.rect(marginX, currentY, contentWidth, 10, 'FD');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(15, 23, 42);
+      doc.text(`TOTAL ATLET: ${athletesList.length} PESERTA`, marginX + 4, currentY + 6.5);
+      doc.text(`GELANGGANG: ${(gelanggang || 'GELANGGANG 1').toUpperCase()}`, marginX + 60, currentY + 6.5);
+      doc.text(`TANGGAL CETAK: ${new Date().toLocaleDateString('id-ID', { dateStyle: 'full' })}`, marginX + 110, currentY + 6.5);
+      currentY += 14;
+
+      // Table Header
+      doc.setFillColor(15, 23, 42);
+      doc.rect(marginX, currentY, contentWidth, 8, 'F');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(255, 255, 255);
+
+      const colNo = 10;
+      const colNama = 58;
+      const colKontingen = 48;
+      const colKelas = 26;
+      const colUsia = 24;
+
+      let x = marginX;
+      doc.text('NO', x + 2, currentY + 5.5); x += colNo;
+      doc.text('NAMA ATLET / PESERTA', x + 2, currentY + 5.5); x += colNama;
+      doc.text('KONTINGEN / PENGKAB', x + 2, currentY + 5.5); x += colKontingen;
+      doc.text('KELAS', x + 2, currentY + 5.5); x += colKelas;
+      doc.text('USIA', x + 2, currentY + 5.5); x += colUsia;
+      doc.text('GENDER', x + 2, currentY + 5.5);
+      currentY += 8;
+
+      // Rows
+      const pageRows = athletesList.slice(page * rowsPerPage, (page + 1) * rowsPerPage);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+
+      pageRows.forEach((ath, i) => {
+        const rowIndex = page * rowsPerPage + i + 1;
+        const rowHeight = 7.5;
+
+        if (i % 2 === 1) {
+          doc.setFillColor(248, 250, 252);
+          doc.rect(marginX, currentY, contentWidth, rowHeight, 'F');
+        }
+
+        doc.setDrawColor(226, 232, 240);
+        doc.line(marginX, currentY + rowHeight, marginX + contentWidth, currentY + rowHeight);
+
+        doc.setTextColor(15, 23, 42);
+        let rx = marginX;
+        doc.setFont('helvetica', 'bold');
+        doc.text(rowIndex.toString(), rx + 2, currentY + 5); rx += colNo;
+
+        doc.setFont('helvetica', 'bold');
+        doc.text(ath.nama.toUpperCase().slice(0, 32), rx + 2, currentY + 5); rx += colNama;
+
+        doc.setFont('helvetica', 'normal');
+        doc.text(ath.kontingen.toUpperCase().slice(0, 26), rx + 2, currentY + 5); rx += colKontingen;
+        doc.text(ath.kelas.toUpperCase(), rx + 2, currentY + 5); rx += colKelas;
+        doc.text(ath.usia.toUpperCase(), rx + 2, currentY + 5); rx += colUsia;
+        doc.text(ath.gender.toUpperCase(), rx + 2, currentY + 5);
+
+        currentY += rowHeight;
+      });
+
+      // Page number
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7.5);
+      doc.setTextColor(148, 163, 184);
+      doc.text(`Halaman ${page + 1} dari ${totalPages}`, marginX + contentWidth / 2, pageHeight - 12, { align: 'center' });
+
+      // Signatures on last page
+      if (page === totalPages - 1) {
+        const sigY = Math.max(currentY + 12, pageHeight - 38);
+        if (sigY < pageHeight - 18) {
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8);
+          doc.setTextColor(15, 23, 42);
+
+          doc.text('Ketua Pertandingan,', marginX + 30, sigY, { align: 'center' });
+          doc.text('(........................................)', marginX + 30, sigY + 16, { align: 'center' });
+
+          doc.text('Sekretaris Pertandingan,', marginX + contentWidth - 30, sigY, { align: 'center' });
+          doc.text('(........................................)', marginX + contentWidth - 30, sigY + 16, { align: 'center' });
+        }
+      }
+    }
+
+    doc.save(`Daftar_Atlet_Terdaftar_${Date.now()}.pdf`);
+  };
+
+  // 2. Generate Bracket PDF
+  const generateBracketReportPdf = (cat: BaganCategory, eventName: string, gelanggang: string) => {
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const marginX = 12;
+    const contentWidth = pageWidth - marginX * 2;
+
+    let currentY = 14;
+
+    // Outer border
+    doc.setDrawColor(15, 23, 42);
+    doc.setLineWidth(0.6);
+    doc.rect(8, 8, pageWidth - 16, pageHeight - 16);
+
+    // Title
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(13);
+    doc.setTextColor(15, 23, 42);
+    doc.text('BAGAN PERTANDINGAN PENCAK SILAT (RESMI)', pageWidth / 2, currentY, { align: 'center' });
+    currentY += 5;
+
+    doc.setFontSize(11);
+    doc.text((eventName || 'KEJUARAAN PENCAK SILAT NASIONAL').toUpperCase(), pageWidth / 2, currentY, { align: 'center' });
+    currentY += 4.5;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(185, 28, 28);
+    doc.text(`KATEGORI: ${cat.name.toUpperCase()} (Ukuran: ${cat.size} Peserta)`, pageWidth / 2, currentY, { align: 'center' });
+    currentY += 4;
+
+    // Divider
+    doc.setDrawColor(203, 213, 225);
+    doc.setLineWidth(0.4);
+    doc.line(marginX, currentY, marginX + contentWidth, currentY);
+    currentY += 6;
+
+    // Table Header
+    doc.setFillColor(15, 23, 42);
+    doc.rect(marginX, currentY, contentWidth, 8, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(255, 255, 255);
+
+    doc.text('NO', marginX + 3, currentY + 5.5);
+    doc.text('PARTAI', marginX + 14, currentY + 5.5);
+    doc.text('BABAK', marginX + 34, currentY + 5.5);
+    doc.text('SUDUT MERAH (NAMA / KONTINGEN)', marginX + 66, currentY + 5.5);
+    doc.text('SUDUT BIRU (NAMA / KONTINGEN)', marginX + 124, currentY + 5.5);
+    doc.text('HASIL', marginX + 172, currentY + 5.5);
+    currentY += 8;
+
+    cat.matches.forEach((m, index) => {
+      if (currentY > pageHeight - 35) {
+        doc.addPage('a4', 'p');
+        currentY = 16;
+        doc.setDrawColor(15, 23, 42);
+        doc.setLineWidth(0.6);
+        doc.rect(8, 8, pageWidth - 16, pageHeight - 16);
+      }
+
+      const rowHeight = 9;
+      if (index % 2 === 1) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(marginX, currentY, contentWidth, rowHeight, 'F');
+      }
+
+      doc.setDrawColor(226, 232, 240);
+      doc.line(marginX, currentY + rowHeight, marginX + contentWidth, currentY + rowHeight);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text((index + 1).toString(), marginX + 3, currentY + 5.5);
+      doc.text(m.partai, marginX + 14, currentY + 5.5);
+
+      const roundLabel = getRoundLabelIndo(m.round).toUpperCase();
+      doc.text(roundLabel, marginX + 34, currentY + 5.5);
+
+      // Merah
+      const merahNama = m.atletMerah.nama ? `${m.atletMerah.nama} (${m.atletMerah.kontingen})` : '—';
+      const isMerahWin = m.winner === 'merah';
+      doc.setTextColor(isMerahWin ? 220 : 15, isMerahWin ? 38 : 23, isMerahWin ? 38 : 42);
+      doc.text(merahNama.slice(0, 30), marginX + 66, currentY + 5.5);
+
+      // Biru
+      const biruNama = m.atletBiru.nama ? `${m.atletBiru.nama} (${m.atletBiru.kontingen})` : '—';
+      const isBiruWin = m.winner === 'biru';
+      doc.setTextColor(isBiruWin ? 37 : 15, isBiruWin ? 99 : 23, isBiruWin ? 235 : 42);
+      doc.text(biruNama.slice(0, 30), marginX + 124, currentY + 5.5);
+
+      // Winner
+      doc.setTextColor(15, 23, 42);
+      const winText = isMerahWin ? 'MERAH' : isBiruWin ? 'BIRU' : '-';
+      doc.text(winText, marginX + 172, currentY + 5.5);
+
+      currentY += rowHeight;
+    });
+
+    // Final champion if any
+    const finalMatch = cat.matches.find(m => m.round === 'final');
+    if (finalMatch && finalMatch.winner) {
+      const champ = finalMatch.winner === 'merah' ? finalMatch.atletMerah : finalMatch.atletBiru;
+      currentY += 8;
+      doc.setFillColor(254, 243, 199);
+      doc.setDrawColor(245, 158, 11);
+      doc.rect(marginX + 20, currentY, contentWidth - 40, 14, 'FD');
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(180, 83, 9);
+      doc.text('🏆 JUARA 1 (CHAMPION)', pageWidth / 2, currentY + 5, { align: 'center' });
+      doc.setFontSize(9.5);
+      doc.setTextColor(15, 23, 42);
+      doc.text(`${champ.nama.toUpperCase()} (${champ.kontingen.toUpperCase()})`, pageWidth / 2, currentY + 10.5, { align: 'center' });
+      currentY += 20;
+    } else {
+      currentY += 10;
+    }
+
+    // Signatures
+    const sigY = Math.max(currentY + 4, pageHeight - 36);
+    if (sigY < pageHeight - 16) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(15, 23, 42);
+
+      doc.text('Ketua Pertandingan,', marginX + 30, sigY, { align: 'center' });
+      doc.text('(........................................)', marginX + 30, sigY + 16, { align: 'center' });
+
+      doc.text('Sekretaris Pertandingan,', marginX + contentWidth - 30, sigY, { align: 'center' });
+      doc.text('(........................................)', marginX + contentWidth - 30, sigY + 16, { align: 'center' });
+    }
+
+    doc.save(`Bagan_${cat.name.replace(/\s+/g, '_')}_${Date.now()}.pdf`);
+  };
 
   const handleDownloadPDFReport = async (reportType: 'athletes' | 'bracket' | 'control') => {
     playBeep('valid');
     setIsGeneratingPdf(true);
 
-    setTimeout(async () => {
-      try {
-        const element = reportType === 'bracket' ? (bracketPrintAreaRef.current || reportPrintAreaRef.current) : reportPrintAreaRef.current;
-        if (!element) {
+    try {
+      if (reportType === 'control') {
+        // Build schedule match rows based on scheduled IDs or all matches
+        const matchesToExport = flatMatchesList
+          .filter(item => scheduledMatchIds.includes(item.uniqueId))
+          .sort((a, b) => {
+            const idxA = scheduledMatchIds.indexOf(a.uniqueId);
+            const idxB = scheduledMatchIds.indexOf(b.uniqueId);
+            return idxA - idxB;
+          });
+
+        const listToUse = matchesToExport.length > 0 ? matchesToExport : flatMatchesList;
+
+        if (listToUse.length === 0) {
+          alert('Belum ada data partai pertandingan untuk diunduh. Silakan buat atau input data atlet terlebih dahulu.');
           setIsGeneratingPdf(false);
           return;
         }
 
-        // Clone the element to render offscreen safely at positive coords, avoiding iframe scroll or negative coordinate bugs
-        const clone = element.cloneNode(true) as HTMLDivElement;
-        clone.style.position = 'fixed';
-        clone.style.left = '0';
-        clone.style.top = '0';
-        clone.style.width = '800px';
-        clone.style.height = 'auto';
-        clone.style.zIndex = '-99999';
-        clone.style.opacity = '1';
-        clone.style.visibility = 'visible';
-        clone.style.backgroundColor = '#ffffff';
-        clone.style.color = '#000000';
+        const scheduleRows: ScheduleMatchRow[] = listToUse.map((item, index) => {
+          const partaiNum = matchesToExport.length > 0
+            ? (index + 1).toString()
+            : (item.match.partai.replace(/\D/g, '') || (index + 1).toString());
 
-        document.body.appendChild(clone);
-
-        const canvas = await safeHtml2canvas(clone, {
-          scale: 2, // High resolution
-          useCORS: true,
-          backgroundColor: '#ffffff',
-          logging: false,
-          width: 800,
-          height: clone.scrollHeight || 1123
+          return {
+            no: index + 1,
+            partai: partaiNum,
+            kelas: (item.kelas || item.catName || 'Kelas A').replace('Kelas ', '').toUpperCase(),
+            roundLabel: getRoundLabelIndo(item.round),
+            merahNama: item.match.atletMerah.nama || '—',
+            merahKontingen: item.match.atletMerah.kontingen || '—',
+            biruNama: item.match.atletBiru.nama || '—',
+            biruKontingen: item.match.atletBiru.kontingen || '—',
+            remark: item.match.winner ? (item.match.winner === 'merah' ? 'Pemenang: Merah' : 'Pemenang: Biru') : '',
+            winner: item.match.winner
+          };
         });
 
-        document.body.removeChild(clone);
+        const meta: ScheduleMetadata = {
+          headerTitle: 'JADWAL PERTANDINGAN PENCAK SILAT',
+          headerSubtitle: (state.namaEvent || 'KEJUARAAN PENCAK SILAT').toUpperCase(),
+          headerLocationDate: 'KOMISI PERTANDINGAN IPSI',
+          gelanggang: (state.gelanggang || 'GELANGGANG 1').toUpperCase(),
+          hariTanggal: new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
+          sesiNama: '1 - REGULER',
+          showSignatures: true
+        };
 
-        const imgData = canvas.toDataURL('image/png');
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        const imgWidth = 210; // A4 standard width (mm)
-        const pageHeight = 295; // A4 standard height (mm)
-        const imgHeight = (canvas.height * imgWidth) / canvas.width;
-        let heightLeft = imgHeight;
-        let position = 0;
-
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-
-        while (heightLeft >= 0.5) {
-          position = heightLeft - imgHeight;
-          pdf.addPage();
-          pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-          heightLeft -= pageHeight;
+        generateSchedulePdf(meta, scheduleRows);
+      } else if (reportType === 'athletes') {
+        if (athletes.length === 0) {
+          alert('Belum ada atlet yang terdaftar untuk diunduh.');
+          setIsGeneratingPdf(false);
+          return;
         }
-
-        pdf.save(`Dokumen_${reportType}_Silat_${Date.now()}.pdf`);
-      } catch (e) {
-        console.error("Failed to generate PDF", e);
-        alert("Gagal mengunduh PDF. Silakan coba kembali.");
-      } finally {
-        setIsGeneratingPdf(false);
+        generateAthletesRosterPdf(athletes, state.namaEvent, state.gelanggang || 'GELANGGANG 1');
+      } else if (reportType === 'bracket') {
+        if (!activeBaganCategory) {
+          alert('Pilih salah satu kategori bagan terlebih dahulu.');
+          setIsGeneratingPdf(false);
+          return;
+        }
+        generateBracketReportPdf(activeBaganCategory, state.namaEvent, state.gelanggang || 'GELANGGANG 1');
       }
-    }, 500);
+    } catch (e) {
+      console.error('Failed to generate PDF', e);
+      alert('Gagal mengunduh PDF. Silakan coba kembali.');
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   return (
@@ -1918,8 +2276,20 @@ export default function RegistrasiDataPanel({ theme, state, dispatch, onClose }:
                 <div className={`p-5 rounded-2xl border flex flex-col gap-3 ${
                   theme === 'dark' ? 'bg-[#080c16] border-slate-900' : 'bg-white border-slate-200'
                 }`}>
-                  <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider font-mono mb-1">INTEGRASI DATA EXCEL / PDF</h3>
+                  <h3 className="text-xs font-black uppercase text-slate-400 tracking-wider font-mono mb-1">INTEGRASI & INPUT DATA OTOMATIS</h3>
                   
+                  {/* Smart Auto-Parser Trigger Button */}
+                  <button
+                    onClick={() => {
+                      playBeep('click');
+                      setShowSmartInputModal(true);
+                    }}
+                    className="w-full py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-black text-xs uppercase rounded-xl transition-all shadow-[0_0_15px_rgba(245,158,11,0.35)] cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <Wand2 className="w-4 h-4 text-amber-200" />
+                    <span>✨ Input Data Otomatis (Smart Parser)</span>
+                  </button>
+
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       onClick={handleDownloadTemplateAthletes}
@@ -2494,6 +2864,14 @@ export default function RegistrasiDataPanel({ theme, state, dispatch, onClose }:
                             title="Undi Atlet Secara Acak"
                           >
                             🎯 Lotting Atlet
+                          </button>
+
+                          <button
+                            onClick={() => handleDownloadPDFReport('bracket')}
+                            className="px-2.5 py-1.5 text-[9px] font-black uppercase tracking-wider bg-purple-600 hover:bg-purple-500 text-white rounded-lg flex items-center gap-1 transition-all shadow shadow-purple-800/20 cursor-pointer"
+                            title="Unduh Dokumen PDF Bagan Pertandingan"
+                          >
+                            <FileText className="w-3.5 h-3.5" /> Unduh Bagan PDF
                           </button>
                         </div>
                       </div>
@@ -3651,6 +4029,228 @@ export default function RegistrasiDataPanel({ theme, state, dispatch, onClose }:
           </div>
         </div>
       </div>
+
+      {/* SMART AUTO-PARSER MODAL */}
+      {showSmartInputModal && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className={`w-full max-w-4xl rounded-2xl border shadow-2xl overflow-hidden flex flex-col max-h-[90vh] ${
+              theme === 'dark' ? 'bg-[#080d1a] border-amber-500/40 text-slate-100' : 'bg-white border-amber-400 text-slate-900'
+            }`}
+          >
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-amber-500/30 bg-gradient-to-r from-amber-950/80 via-slate-900 to-amber-950/80 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-400/50 flex items-center justify-center text-amber-300">
+                  <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black uppercase text-amber-200 flex items-center gap-2">
+                    <span>Input Data Otomatis & Pemisah Kategori Cerdas</span>
+                    <span className="px-2 py-0.5 rounded text-[9px] font-mono bg-emerald-500/20 border border-emerald-400/40 text-emerald-300">
+                      Excel / CSV / Teks
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400 font-mono">
+                    Unggah file Excel atau tempel daftar peserta. Sistem otomatis memisahkan Kategori, Kelas, Usia, Gender, Nama & Kontingen.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => downloadOfficialExcelTemplate()}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-400/40 text-emerald-200 text-xs font-bold font-mono uppercase flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Template Excel</span>
+                </button>
+                <button
+                  onClick={() => setShowSmartInputModal(false)}
+                  className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 overflow-y-auto space-y-4 flex-1">
+              {/* Tab Selector: Excel Upload vs Text Paste */}
+              <div className="flex items-center gap-2 p-1 bg-slate-950/80 border border-slate-800 rounded-xl w-fit">
+                <button
+                  onClick={() => setSmartInputMode('excel')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
+                    smartInputMode === 'excel'
+                      ? 'bg-emerald-600 text-white shadow-md'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <span>Upload File Excel (.xlsx / .xls)</span>
+                </button>
+
+                <button
+                  onClick={() => setSmartInputMode('text')}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold font-mono uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
+                    smartInputMode === 'text'
+                      ? 'bg-amber-600 text-white shadow-md'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Wand2 className="w-3.5 h-3.5" />
+                  <span>Tempel Teks Bebas</span>
+                </button>
+              </div>
+
+              {/* Hidden File Input */}
+              <input
+                ref={smartFileInputRef}
+                type="file"
+                accept=".xlsx, .xls, .csv"
+                onChange={async (e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    await handleProcessExcelSmart(e.target.files[0]);
+                    e.target.value = '';
+                  }
+                }}
+                className="hidden"
+              />
+
+              {smartInputMode === 'excel' ? (
+                <div className="space-y-3">
+                  <div 
+                    onClick={() => smartFileInputRef.current?.click()}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onDrop={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                        await handleProcessExcelSmart(e.dataTransfer.files[0]);
+                      }
+                    }}
+                    className="border-2 border-dashed border-emerald-500/50 hover:border-emerald-400 bg-slate-950/70 hover:bg-emerald-950/20 p-8 rounded-2xl flex flex-col items-center justify-center text-center cursor-pointer transition-all group"
+                  >
+                    <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-400/30 flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform mb-2">
+                      <FileUp className="w-6 h-6" />
+                    </div>
+                    <h4 className="text-sm font-black text-slate-200 uppercase tracking-wide group-hover:text-emerald-300">
+                      {smartExcelLoading ? 'Sedang Membaca Excel...' : 'Klik atau Seret (Drag & Drop) File Excel ke Sini'}
+                    </h4>
+                    <p className="text-xs text-slate-400 font-mono mt-1">
+                      Format kolom: <span className="text-emerald-400 font-bold">Nama Atlet, Kontingen, Kategori, Kelas, Usia & Gender</span>
+                    </p>
+                    
+                    {smartExcelFileName && (
+                      <div className="mt-3 px-3 py-1.5 rounded-lg bg-emerald-950 border border-emerald-400/50 text-emerald-200 text-xs font-mono font-bold flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>File Terbaca: {smartExcelFileName}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {smartExcelError && (
+                    <div className="p-3 bg-red-950/60 border border-red-500/50 rounded-xl text-xs font-mono text-red-200 flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                      <span>{smartExcelError}</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-mono font-bold uppercase text-amber-300">
+                      Tempel Teks Daftar Atlet (Bebas Format):
+                    </label>
+                    <button
+                      onClick={() => {
+                        const sample = `1. HIDAYAT LIMONU - SULAWESI UTARA - Tanding B PA Dewasa\n2. YUDHA MAHENDRI - RIAU - Tanding B PA Dewasa\n3. AFRIANI LAURENSIA (SUMATERA UTARA) Kelas B PI Remaja\n4. FAJAR RAMADHAN - BANTEN - Kelas A Remaja Putra`;
+                        handleAnalyzeSmartText(sample);
+                      }}
+                      className="text-[11px] font-bold text-amber-400 hover:text-amber-300 underline cursor-pointer"
+                    >
+                      Muat Contoh Data
+                    </button>
+                  </div>
+                  <textarea
+                    rows={6}
+                    value={smartRawText}
+                    onChange={(e) => handleAnalyzeSmartText(e.target.value)}
+                    placeholder="Contoh:&#10;1. HIDAYAT LIMONU - SULAWESI UTARA - Tanding B PA Dewasa&#10;2. YUDHA MAHENDRI - RIAU - Tanding B PA Dewasa"
+                    className={`w-full p-3.5 border rounded-xl text-xs font-mono placeholder-slate-500 focus:outline-none ${
+                      theme === 'dark' ? 'bg-slate-950 border-slate-700 text-slate-200 focus:border-amber-500' : 'bg-slate-50 border-slate-300 text-slate-800 focus:border-amber-500'
+                    }`}
+                  />
+                </div>
+              )}
+
+              {smartParsedList.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center text-xs font-mono">
+                    <span className="font-bold text-cyan-400">Hasil Pemisahan: {smartParsedList.length} Peserta Terdeteksi</span>
+                    <button
+                      onClick={() => exportAthletesToExcelFile(smartParsedList, 'Data_Atlet_Registrasi.xlsx')}
+                      className="text-xs font-mono font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Ekspor ke Excel</span>
+                    </button>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto border border-slate-800 rounded-lg">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 text-[10px] uppercase font-mono">
+                        <tr>
+                          <th className="py-2 px-3 text-center w-8">No</th>
+                          <th className="py-2 px-3">Nama Atlet</th>
+                          <th className="py-2 px-3">Kontingen</th>
+                          <th className="py-2 px-3 text-center">Kelas</th>
+                          <th className="py-2 px-3 text-center">Usia</th>
+                          <th className="py-2 px-3 text-center">Gender</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60 font-mono">
+                        {smartParsedList.map((item, i) => (
+                          <tr key={item.id} className="hover:bg-slate-800/30">
+                            <td className="py-1.5 px-3 text-center text-slate-500">{i + 1}</td>
+                            <td className="py-1.5 px-3 font-bold text-white uppercase">{item.nama}</td>
+                            <td className="py-1.5 px-3 text-slate-300 uppercase">{item.kontingen}</td>
+                            <td className="py-1.5 px-3 text-center text-amber-300 font-bold">{item.kelas}</td>
+                            <td className="py-1.5 px-3 text-center text-emerald-300">{item.kategoriUsia}</td>
+                            <td className="py-1.5 px-3 text-center text-pink-300">{item.gender}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-slate-800 bg-slate-950 flex justify-between items-center">
+              <button
+                onClick={() => setShowSmartInputModal(false)}
+                className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold uppercase cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleApplySmartAthletes}
+                disabled={smartParsedList.length === 0}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black uppercase tracking-wider flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Daftarkan & Buat Bagan ({smartParsedList.length} Atlet)</span>
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
     </div>
   );

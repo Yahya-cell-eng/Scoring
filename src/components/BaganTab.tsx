@@ -6,10 +6,17 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Trophy, Plus, Trash2, Award, Play, RotateCcw, Edit, X, Save, Users, HelpCircle
+  Trophy, Plus, Trash2, Award, Play, RotateCcw, Edit, X, Save, Users, HelpCircle, Sparkles
 } from 'lucide-react';
 import { MatchState, BaganMatch, BaganCategory } from '../types';
 import { playBeep } from '../utils/sound';
+import AturUrutanPartaiModal from './AturUrutanPartaiModal';
+import { 
+  getNextMatchTarget, 
+  getPreviousSourceMatches, 
+  propagateBracketWithAutoAdvance, 
+  isByeAthlete 
+} from '../utils/bracketProgression';
 
 interface BaganTabProps {
   theme: 'dark' | 'light';
@@ -283,6 +290,7 @@ export default function BaganTab({ theme, state, dispatch, setActiveTab }: Bagan
   const [newCatUsia, setNewCatUsia] = useState("Remaja");
 
   const [showLottingModal, setShowLottingModal] = useState(false);
+  const [showAturUrutanModal, setShowAturUrutanModal] = useState(false);
   const [lottingInput, setLottingInput] = useState("");
   const [lottingMode, setLottingMode] = useState<'single' | 'split' | 'manual'>('single');
   const [lottingMaxPerBagan, setLottingMaxPerBagan] = useState<4 | 8 | 16>(4);
@@ -412,217 +420,16 @@ export default function BaganTab({ theme, state, dispatch, setActiveTab }: Bagan
       const updatedMatches = cat.matches.map(m => ({
         ...m,
         atletMerah: { ...m.atletMerah },
-        atletBiru: { ...m.atletBiru }
+        atletBiru: { ...m.atletBiru },
+        winner: m.id === matchId ? winner : m.winner
       }));
 
-      const matchIndex = updatedMatches.findIndex(m => m.id === matchId);
-      if (matchIndex === -1) return cat;
-
-      const oldWinner = updatedMatches[matchIndex].winner;
-      updatedMatches[matchIndex].winner = winner;
-
-      const getAdvancedAthlete = (m: any, win: 'merah' | 'biru' | null) => {
-        if (win === 'merah') return m.atletMerah;
-        if (win === 'biru') return m.atletBiru;
-        return { nama: '', kontingen: '' };
-      };
-
-      const adv = getAdvancedAthlete(updatedMatches[matchIndex], winner);
-
-      // Helper to dynamically set athlete by Match ID safely
-      const setTargetAthlete = (targetId: number, side: 'merah' | 'biru', athlete: { nama: string; kontingen: string }) => {
-        const idx = updatedMatches.findIndex(m => m.id === targetId);
-        if (idx !== -1) {
-          if (side === 'merah') {
-            updatedMatches[idx].atletMerah = athlete;
-          } else {
-            updatedMatches[idx].atletBiru = athlete;
-          }
-        }
-      };
-
-      // Helper to dynamically clear winner by Match ID safely
-      const resetTargetWinner = (targetId: number) => {
-        const idx = updatedMatches.findIndex(m => m.id === targetId);
-        if (idx !== -1) {
-          updatedMatches[idx].winner = null;
-        }
-      };
-
-      // Cascading updates for size 16
-      if (cat.size === 16) {
-        if (matchId === 1) {
-          setTargetAthlete(9, 'merah', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(9);
-            setTargetAthlete(13, 'merah', { nama: '', kontingen: '' });
-            resetTargetWinner(13);
-            setTargetAthlete(15, 'merah', { nama: '', kontingen: '' });
-            resetTargetWinner(15);
-          }
-        } else if (matchId === 2) {
-          setTargetAthlete(9, 'biru', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(9);
-            setTargetAthlete(13, 'merah', { nama: '', kontingen: '' });
-            resetTargetWinner(13);
-            setTargetAthlete(15, 'merah', { nama: '', kontingen: '' });
-            resetTargetWinner(15);
-          }
-        } else if (matchId === 3) {
-          setTargetAthlete(10, 'merah', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(10);
-            setTargetAthlete(13, 'biru', { nama: '', kontingen: '' });
-            resetTargetWinner(13);
-            setTargetAthlete(15, 'merah', { nama: '', kontingen: '' });
-            resetTargetWinner(15);
-          }
-        } else if (matchId === 4) {
-          setTargetAthlete(10, 'biru', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(10);
-            setTargetAthlete(13, 'biru', { nama: '', kontingen: '' });
-            resetTargetWinner(13);
-            setTargetAthlete(15, 'merah', { nama: '', kontingen: '' });
-            resetTargetWinner(15);
-          }
-        } else if (matchId === 5) {
-          setTargetAthlete(11, 'merah', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(11);
-            setTargetAthlete(14, 'merah', { nama: '', kontingen: '' });
-            resetTargetWinner(14);
-            setTargetAthlete(15, 'biru', { nama: '', kontingen: '' });
-            resetTargetWinner(15);
-          }
-        } else if (matchId === 6) {
-          setTargetAthlete(11, 'biru', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(11);
-            setTargetAthlete(14, 'merah', { nama: '', kontingen: '' });
-            resetTargetWinner(14);
-            setTargetAthlete(15, 'biru', { nama: '', kontingen: '' });
-            resetTargetWinner(15);
-          }
-        } else if (matchId === 7) {
-          setTargetAthlete(12, 'merah', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(12);
-            setTargetAthlete(14, 'biru', { nama: '', kontingen: '' });
-            resetTargetWinner(14);
-            setTargetAthlete(15, 'biru', { nama: '', kontingen: '' });
-            resetTargetWinner(15);
-          }
-        } else if (matchId === 8) {
-          setTargetAthlete(12, 'biru', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(12);
-            setTargetAthlete(14, 'biru', { nama: '', kontingen: '' });
-            resetTargetWinner(14);
-            setTargetAthlete(15, 'biru', { nama: '', kontingen: '' });
-            resetTargetWinner(15);
-          }
-        } else if (matchId === 9) {
-          setTargetAthlete(13, 'merah', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(13);
-            setTargetAthlete(15, 'merah', { nama: '', kontingen: '' });
-            resetTargetWinner(15);
-          }
-        } else if (matchId === 10) {
-          setTargetAthlete(13, 'biru', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(13);
-            setTargetAthlete(15, 'merah', { nama: '', kontingen: '' });
-            resetTargetWinner(15);
-          }
-        } else if (matchId === 11) {
-          setTargetAthlete(14, 'merah', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(14);
-            setTargetAthlete(15, 'biru', { nama: '', kontingen: '' });
-            resetTargetWinner(15);
-          }
-        } else if (matchId === 12) {
-          setTargetAthlete(14, 'biru', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(14);
-            setTargetAthlete(15, 'biru', { nama: '', kontingen: '' });
-            resetTargetWinner(15);
-          }
-        } else if (matchId === 13) {
-          setTargetAthlete(15, 'merah', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(15);
-          }
-        } else if (matchId === 14) {
-          setTargetAthlete(15, 'biru', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(15);
-          }
-        }
-      }
-      // Cascading updates for size 8
-      else if (cat.size === 8) {
-        if (matchId === 1) {
-          setTargetAthlete(5, 'merah', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(5);
-            setTargetAthlete(7, 'merah', { nama: '', kontingen: '' });
-            resetTargetWinner(7);
-          }
-        } else if (matchId === 2) {
-          setTargetAthlete(5, 'biru', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(5);
-            setTargetAthlete(7, 'merah', { nama: '', kontingen: '' });
-            resetTargetWinner(7);
-          }
-        } else if (matchId === 3) {
-          setTargetAthlete(6, 'merah', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(6);
-            setTargetAthlete(7, 'biru', { nama: '', kontingen: '' });
-            resetTargetWinner(7);
-          }
-        } else if (matchId === 4) {
-          setTargetAthlete(6, 'biru', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(6);
-            setTargetAthlete(7, 'biru', { nama: '', kontingen: '' });
-            resetTargetWinner(7);
-          }
-        } else if (matchId === 5) {
-          setTargetAthlete(7, 'merah', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(7);
-          }
-        } else if (matchId === 6) {
-          setTargetAthlete(7, 'biru', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(7);
-          }
-        }
-      } 
-      // Cascading updates for size 4
-      else if (cat.size === 4) {
-        if (matchId === 1) {
-          setTargetAthlete(3, 'merah', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(3);
-          }
-        } else if (matchId === 2) {
-          setTargetAthlete(3, 'biru', adv);
-          if (winner === null || oldWinner !== winner) {
-            resetTargetWinner(3);
-          }
-        }
-      }
+      // Automatically flow winners through all bracket stages
+      const propagated = propagateBracketWithAutoAdvance(updatedMatches, cat.size);
 
       return {
         ...cat,
-        matches: updatedMatches
+        matches: propagated
       };
     });
     updateCategories(newCats);
@@ -1069,6 +876,13 @@ export default function BaganTab({ theme, state, dispatch, setActiveTab }: Bagan
           </h4>
           <div className="flex gap-1 flex-shrink-0">
             <button
+              onClick={() => { playBeep('click'); setShowAturUrutanModal(true); }}
+              className="px-1.5 py-0.5 text-[9px] font-bold tracking-tight bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 rounded border border-indigo-700/50 transition-colors uppercase cursor-pointer flex items-center gap-0.5"
+              title="Atur & Nomor Ulang Seluruh Partai"
+            >
+              <Sparkles className="w-2.5 h-2.5" /> Urut Partai
+            </button>
+            <button
               onClick={handleDeleteAllCategories}
               className="px-1.5 py-0.5 text-[9px] font-bold tracking-tight bg-red-950/60 hover:bg-red-900 text-red-400 hover:text-red-300 rounded border border-red-900/50 transition-colors uppercase cursor-pointer"
               title="Hapus semua bagan kelas"
@@ -1270,6 +1084,15 @@ export default function BaganTab({ theme, state, dispatch, setActiveTab }: Bagan
                     <option value={16} className="bg-slate-900 text-slate-300">16 Atlet</option>
                   </select>
                 </div>
+
+                <button
+                  onClick={() => { playBeep('click'); setShowAturUrutanModal(true); }}
+                  className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-md flex items-center gap-1 transition-all shadow shadow-purple-900/30 cursor-pointer"
+                  title="Atur & Nomor Ulang Seluruh Urutan Partai Secara Berurutan (Standar IPSI)"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Atur Urutan Partai</span>
+                </button>
 
                 <button
                   onClick={() => { playBeep('click'); handleOpenManageAthletesModal(); }}
@@ -1933,6 +1756,16 @@ export default function BaganTab({ theme, state, dispatch, setActiveTab }: Bagan
         )}
       </AnimatePresence>
 
+      {/* Atur & Perbaiki Urutan Partai Modal */}
+      <AturUrutanPartaiModal
+        isOpen={showAturUrutanModal}
+        onClose={() => setShowAturUrutanModal(false)}
+        categories={categories}
+        onSave={(updated) => {
+          updateCategories(updated);
+        }}
+      />
+
     </div>
   );
 
@@ -1943,67 +1776,61 @@ export default function BaganTab({ theme, state, dispatch, setActiveTab }: Bagan
     const winnerMerah = match.winner === 'merah';
     const winnerBiru = match.winner === 'biru';
 
-    const getEmptySlotLabelLocal = (slot: 'merah' | 'biru', currentName: string): string => {
-      if (currentName && currentName.trim() !== '' && !currentName.includes('...') && currentName !== 'Belum ada atlet') {
-        return currentName;
+    const nextTarget = getNextMatchTarget(category, match.id);
+    const { merahSource, biruSource } = getPreviousSourceMatches(category, match.id);
+
+    const getSlotDisplay = (slot: 'merah' | 'biru') => {
+      const athlete = slot === 'merah' ? match.atletMerah : match.atletBiru;
+      const source = slot === 'merah' ? merahSource : biruSource;
+      const isBye = isByeAthlete(athlete.nama);
+
+      if (athlete.nama && athlete.nama.trim() !== '' && athlete.nama !== 'Belum ada atlet') {
+        return {
+          nama: athlete.nama,
+          kontingen: athlete.kontingen || (isBye ? 'AUTOMATIC' : '—'),
+          isPending: false,
+          isBye,
+          sourceBadge: source ? `Lolos dari ${source.sourcePartaiLabel}` : null
+        };
       }
-      
-      const size = category.size;
-      let sourceMatchId: number | null = null;
-      
-      if (size === 4) {
-        if (match.id === 3) {
-          sourceMatchId = slot === 'merah' ? 1 : 2;
-        }
-      } else if (size === 8) {
-        if (match.id === 5) {
-          sourceMatchId = slot === 'merah' ? 1 : 2;
-        } else if (match.id === 6) {
-          sourceMatchId = slot === 'merah' ? 3 : 4;
-        } else if (match.id === 7) {
-          sourceMatchId = slot === 'merah' ? 5 : 6;
-        }
-      } else if (size === 16) {
-        if (match.id === 9) {
-          sourceMatchId = slot === 'merah' ? 1 : 2;
-        } else if (match.id === 10) {
-          sourceMatchId = slot === 'merah' ? 3 : 4;
-        } else if (match.id === 11) {
-          sourceMatchId = slot === 'merah' ? 5 : 6;
-        } else if (match.id === 12) {
-          sourceMatchId = slot === 'merah' ? 7 : 8;
-        } else if (match.id === 13) {
-          sourceMatchId = slot === 'merah' ? 9 : 10;
-        } else if (match.id === 14) {
-          sourceMatchId = slot === 'merah' ? 11 : 12;
-        } else if (match.id === 15) {
-          sourceMatchId = slot === 'merah' ? 13 : 14;
-        }
+
+      if (source) {
+        return {
+          nama: source.placeholderText,
+          kontingen: `Menunggu Hasil ${source.sourceRoundLabel}`,
+          isPending: true,
+          isBye: false,
+          sourceBadge: null
+        };
       }
-      
-      if (sourceMatchId !== null) {
-        const srcMatch = category.matches.find(m => m.id === sourceMatchId);
-        if (srcMatch) {
-          return `Pemenang Partai ${srcMatch.partai}`;
-        }
-      }
-      
-      return "Belum ada atlet";
+
+      return {
+        nama: "Belum ada atlet",
+        kontingen: "—",
+        isPending: true,
+        isBye: false,
+        sourceBadge: null
+      };
     };
+
+    const merahDisp = getSlotDisplay('merah');
+    const biruDisp = getSlotDisplay('biru');
 
     return (
       <div 
         key={match.id} 
-        className={`w-56 p-3 rounded-xl border flex flex-col gap-2 relative shadow-lg group transition-all duration-300 hover:scale-[1.02] ${
+        className={`w-64 p-3 rounded-xl border flex flex-col gap-2 relative shadow-lg group transition-all duration-300 hover:scale-[1.02] ${
           theme === 'dark' 
-            ? 'bg-slate-950/85 border-slate-800/80 hover:border-slate-700' 
+            ? 'bg-slate-950/90 border-slate-800/80 hover:border-slate-700' 
             : 'bg-slate-50 border-slate-200 hover:border-slate-300'
         }`}
       >
-        {/* Partai Header badge and play trigger */}
+        {/* Partai Header badge and round info */}
         <div className="flex justify-between items-center text-[9px] font-mono font-black uppercase text-slate-500 pb-1 border-b border-slate-800/40">
-          <span>{match.partai}</span>
-          <span className="text-emerald-500/70">{match.round.toUpperCase()}</span>
+          <span className="text-indigo-400 font-bold">{match.partai}</span>
+          <span className="text-emerald-400 bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-800/40">
+            {match.round.toUpperCase()}
+          </span>
         </div>
 
         {/* Competitors listing */}
@@ -2011,69 +1838,125 @@ export default function BaganTab({ theme, state, dispatch, setActiveTab }: Bagan
           {/* Merah row */}
           <div className={`flex items-center justify-between p-1.5 rounded-lg border text-left transition-all relative overflow-hidden ${
             winnerMerah 
-              ? 'bg-red-950/20 border-red-700/60 font-bold text-red-200' 
+              ? 'bg-red-950/30 border-red-600 font-bold text-red-100 shadow-sm shadow-red-900/20' 
+              : merahDisp.isPending
+              ? 'bg-slate-900/20 border-dashed border-slate-800 text-slate-400'
               : theme === 'dark'
-              ? 'bg-slate-900/40 border-slate-850 text-slate-300'
+              ? 'bg-slate-900/50 border-slate-850 text-slate-300'
               : 'bg-white border-slate-200 text-slate-700'
           }`}>
             <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-600" />
             <div className="pl-2 truncate flex-1 leading-tight">
-              <div className="text-[11px] font-extrabold truncate uppercase">
-                {getEmptySlotLabelLocal('merah', match.atletMerah.nama)}
+              <div className="flex items-center gap-1">
+                <span className="text-[11px] font-extrabold truncate uppercase">
+                  {merahDisp.nama}
+                </span>
+                {merahDisp.isBye && (
+                  <span className="text-[8px] bg-amber-950/60 text-amber-400 border border-amber-800/60 px-1 rounded font-black">
+                    BYE
+                  </span>
+                )}
               </div>
-              <div className="text-[9px] font-semibold text-slate-500 truncate">
-                {(!match.atletMerah.nama || match.atletMerah.nama.trim() === '' || match.atletMerah.nama === 'Belum ada atlet') ? '' : (match.atletMerah.kontingen || "—")}
+              <div className="text-[9px] font-semibold text-slate-500 truncate flex items-center gap-1.5 mt-0.5">
+                <span>{merahDisp.kontingen}</span>
+                {merahDisp.sourceBadge && (
+                  <span className="text-[8px] text-emerald-400 font-mono">
+                    • {merahDisp.sourceBadge}
+                  </span>
+                )}
               </div>
             </div>
             {winnerMerah && (
-              <Trophy className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0 animate-bounce" />
+              <Trophy className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0 animate-bounce ml-1" />
             )}
           </div>
 
           {/* Biru row */}
           <div className={`flex items-center justify-between p-1.5 rounded-lg border text-left transition-all relative overflow-hidden ${
             winnerBiru 
-              ? 'bg-blue-950/20 border-blue-700/60 font-bold text-blue-200' 
+              ? 'bg-blue-950/30 border-blue-600 font-bold text-blue-100 shadow-sm shadow-blue-900/20' 
+              : biruDisp.isPending
+              ? 'bg-slate-900/20 border-dashed border-slate-800 text-slate-400'
               : theme === 'dark'
-              ? 'bg-slate-900/40 border-slate-850 text-slate-300'
+              ? 'bg-slate-900/50 border-slate-850 text-slate-300'
               : 'bg-white border-slate-200 text-slate-700'
           }`}>
             <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-600" />
             <div className="pl-2 truncate flex-1 leading-tight">
-              <div className="text-[11px] font-extrabold truncate uppercase">
-                {getEmptySlotLabelLocal('biru', match.atletBiru.nama)}
+              <div className="flex items-center gap-1">
+                <span className="text-[11px] font-extrabold truncate uppercase">
+                  {biruDisp.nama}
+                </span>
+                {biruDisp.isBye && (
+                  <span className="text-[8px] bg-amber-950/60 text-amber-400 border border-amber-800/60 px-1 rounded font-black">
+                    BYE
+                  </span>
+                )}
               </div>
-              <div className="text-[9px] font-semibold text-slate-500 truncate">
-                {(!match.atletBiru.nama || match.atletBiru.nama.trim() === '' || match.atletBiru.nama === 'Belum ada atlet') ? '' : (match.atletBiru.kontingen || "—")}
+              <div className="text-[9px] font-semibold text-slate-500 truncate flex items-center gap-1.5 mt-0.5">
+                <span>{biruDisp.kontingen}</span>
+                {biruDisp.sourceBadge && (
+                  <span className="text-[8px] text-emerald-400 font-mono">
+                    • {biruDisp.sourceBadge}
+                  </span>
+                )}
               </div>
             </div>
             {winnerBiru && (
-              <Trophy className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0 animate-bounce" />
+              <Trophy className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0 animate-bounce ml-1" />
             )}
           </div>
         </div>
 
-        {/* Actions overlay footer (shows on hover) */}
-        <div className="flex gap-1 justify-between items-center mt-1 border-t border-slate-850 pt-2 font-mono">
+        {/* PROGRESSION NOTIFICATION BADGE */}
+        {nextTarget && !nextTarget.isFinal && nextTarget.targetMatchId && (
+          <div className={`text-[9px] font-semibold px-2 py-1 rounded-md flex items-center justify-between gap-1 transition-all ${
+            match.winner 
+              ? 'bg-emerald-950/60 border border-emerald-700/60 text-emerald-300' 
+              : 'bg-slate-900/70 border border-slate-800 text-slate-400'
+          }`}>
+            <span className="truncate">
+              {match.winner 
+                ? `➔ ${nextTarget.winnerAdvancementBadge}`
+                : `➔ ${nextTarget.advancementText}`}
+            </span>
+            {nextTarget.isFinal && (
+              <span className="px-1 py-0.2 bg-amber-500 text-slate-950 font-black text-[8px] rounded uppercase flex-shrink-0">
+                FINAL
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* FINAL ROUND SPECIAL BADGE */}
+        {nextTarget && nextTarget.isFinal && (
+          <div className="text-[9px] font-bold px-2 py-0.5 bg-amber-950/40 border border-amber-800/40 text-amber-400 rounded flex items-center justify-center gap-1">
+            <Trophy className="w-3 h-3 text-amber-400" />
+            <span>Perebutan Juara 1 & 2</span>
+          </div>
+        )}
+
+        {/* Actions overlay footer */}
+        <div className="flex gap-1 justify-between items-center mt-0.5 border-t border-slate-850 pt-2 font-mono">
           {/* Winner declaring buttons */}
           <div className="flex gap-1.5">
             <button
               onClick={() => handleMatchWinner(category.id, match.id, 'merah')}
-              className={`p-1 rounded text-[9px] font-bold cursor-pointer transition-colors ${
-                winnerMerah ? 'bg-red-600 text-white' : 'bg-red-955/20 hover:bg-red-900/40 text-red-400'
+              className={`px-2 py-1 rounded text-[9px] font-black cursor-pointer transition-all ${
+                winnerMerah ? 'bg-red-600 text-white shadow shadow-red-700/50' : 'bg-red-955/30 hover:bg-red-900/50 text-red-300 border border-red-900/40'
               }`}
-              title="Set Merah Menang"
+              title="Set Sudut Merah Menang"
             >
-              🏆 M
+              🏆 MERAH
             </button>
             <button
               onClick={() => handleMatchWinner(category.id, match.id, 'biru')}
-              className={`p-1 rounded text-[9px] font-bold cursor-pointer transition-colors ${
-                winnerBiru ? 'bg-blue-600 text-white' : 'bg-blue-955/20 hover:bg-blue-900/40 text-blue-400'
+              className={`px-2 py-1 rounded text-[9px] font-black cursor-pointer transition-all ${
+                winnerBiru ? 'bg-blue-600 text-white shadow shadow-blue-700/50' : 'bg-blue-955/30 hover:bg-blue-900/50 text-blue-300 border border-blue-900/40'
               }`}
-              title="Set Biru Menang"
+              title="Set Sudut Biru Menang"
             >
-              🏆 B
+              🏆 BIRU
             </button>
             {match.winner && (
               <button

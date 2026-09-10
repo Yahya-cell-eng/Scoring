@@ -5,10 +5,12 @@ import { motion, AnimatePresence } from 'motion/react';
 import { jsPDF } from 'jspdf';
 import { QRCodeSVG } from 'qrcode.react';
 import TGRRegistrasiDataPanel from './TGRRegistrasiDataPanel';
+import SekretarisSeniMultiPesertaPanel from './SekretarisSeniMultiPesertaPanel';
 import { 
   ArrowLeft, UserPlus, Trash2, Edit3, Check, Star, Settings, 
   Timer, Play, Pause, RotateCcw, Award, CheckSquare, RefreshCw, LogIn, ChevronRight, FileSpreadsheet,
-  QrCode, HelpCircle, Sun, Moon, FileText, CheckCircle, Download, Upload, Info, X, Users, Maximize2, Minimize2
+  QrCode, HelpCircle, Sun, Moon, FileText, CheckCircle, Download, Upload, Info, X, Users, Maximize2, Minimize2,
+  Image as ImageIcon
 } from 'lucide-react';
 
 interface TGRSekretarisPanelProps {
@@ -41,20 +43,6 @@ export default function TGRSekretarisPanel({ state, dispatch, onBack, theme, onT
     }
   };
 
-  if (showRegistrasiPage) {
-    return (
-      <TGRRegistrasiDataPanel
-        theme={theme}
-        state={state}
-        dispatch={dispatch}
-        onClose={() => {
-          playBeep('click');
-          setShowRegistrasiPage(false);
-        }}
-      />
-    );
-  }
-
   const [isAuthenticated, setIsAuthenticated] = useState(true);
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -81,8 +69,8 @@ export default function TGRSekretarisPanel({ state, dispatch, onBack, theme, onT
     setCustomConfirm({ show: true, title, message, onConfirm });
   };
 
-  // Tab state: 'roster' | 'control' | 'corrections' | 'rekap'
-  const [activeTab, setActiveTab] = useState<'roster' | 'control' | 'corrections' | 'rekap'>('control');
+  // Tab state: 'roster' | 'control' | 'corrections' | 'rekap' | 'pool_multi'
+  const [activeTab, setActiveTab] = useState<'roster' | 'control' | 'corrections' | 'rekap' | 'pool_multi'>('control');
 
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -102,6 +90,38 @@ export default function TGRSekretarisPanel({ state, dispatch, onBack, theme, onT
   const [formBabak, setFormBabak] = useState(state.babak || 'FINAL');
   const [formJumlahJuri, setFormJumlahJuri] = useState<number>(state.jumlahJuri);
   const [formSelectedWaktu, setFormSelectedWaktu] = useState<number>(state.selectedWaktu);
+
+  // Logo input refs
+  const fileInputKiriRef = useRef<HTMLInputElement>(null);
+  const fileInputTengahRef = useRef<HTMLInputElement>(null);
+  const fileInputKananRef = useRef<HTMLInputElement>(null);
+
+  const handleLogoUpload = (position: 'kiri' | 'tengah' | 'kanan', e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showCustomAlert('File Tidak Valid', 'Format file harus berupa gambar (PNG, JPG, SVG, WebP).');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64 = event.target?.result as string;
+      playBeep('valid');
+      const payload: any = {};
+      if (position === 'kiri') payload.logoKiri = base64;
+      if (position === 'tengah') payload.logoTengah = base64;
+      if (position === 'kanan') payload.logoKanan = base64;
+      
+      await dispatch('TGR_UPLOAD_LOGOS', payload);
+      await dispatch('TGR_ADD_AUDIT_LOG', {
+        user: 'Sekretaris',
+        action: `Mengunggah logo ${position} kejuaraan TGR`
+      });
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Sync settings when state changes from other devices
   useEffect(() => {
@@ -596,6 +616,20 @@ export default function TGRSekretarisPanel({ state, dispatch, onBack, theme, onT
     );
   }
 
+  if (showRegistrasiPage) {
+    return (
+      <TGRRegistrasiDataPanel
+        theme={theme}
+        state={state}
+        dispatch={dispatch}
+        onClose={() => {
+          playBeep('click');
+          setShowRegistrasiPage(false);
+        }}
+      />
+    );
+  }
+
   return (
     <div className={`w-full h-full min-h-screen flex flex-col justify-between select-none transition-colors duration-300 relative ${
       theme === 'dark' ? 'text-slate-100 bg-[#020207]' : 'text-slate-800 bg-slate-50'
@@ -720,6 +754,36 @@ export default function TGRSekretarisPanel({ state, dispatch, onBack, theme, onT
           >
             📄 Cetak & Rekap
           </button>
+          <div className={`h-4 w-[1px] ${theme === 'dark' ? 'bg-slate-800' : 'bg-slate-300'} mx-0.5`} />
+          <button
+            onClick={async () => {
+              playBeep('click');
+              const nextMode = state.sistemSeni === 'prestasi' ? 'pool' : 'prestasi';
+              await dispatch('TGR_SET_SISTEM_SENI', { sistem: nextMode });
+              await dispatch('TGR_ADD_AUDIT_LOG', {
+                user: 'Sekretaris',
+                action: `Mengubah sistem seni arena menjadi: ${nextMode === 'pool' ? 'Sistem Pool (Ranking Nilai)' : 'Sistem Prestasi (Bagan VS)'}`
+              });
+            }}
+            className={`px-3 py-1.5 text-xs uppercase font-black cursor-pointer rounded-lg transition-all flex items-center gap-1.5 border ${
+              state.sistemSeni === 'prestasi'
+                ? 'bg-purple-950/60 border-purple-800/80 text-purple-300 shadow-md shadow-purple-950/50'
+                : 'bg-amber-950/60 border-amber-800/80 text-amber-300 shadow-md shadow-amber-950/50'
+            }`}
+            title="Klik untuk mengubah sistem seni (Sistem Pool vs Sistem Prestasi)"
+          >
+            {state.sistemSeni === 'prestasi' ? (
+              <>
+                <span className="text-purple-400">⚔️</span>
+                <span>SISTEM PRESTASI (VS)</span>
+              </>
+            ) : (
+              <>
+                <span className="text-amber-400">🏊</span>
+                <span>SISTEM POOL</span>
+              </>
+            )}
+          </button>
         </div>
 
         {/* Sync Status Info */}
@@ -807,7 +871,78 @@ export default function TGRSekretarisPanel({ state, dispatch, onBack, theme, onT
                   </h3>
 
                   <div className="space-y-3">
-                    {/* Active Peserta Selection */}
+                    {/* If Prestasi (VS) mode, provide Quick Sudut Switcher */}
+                    {state.sistemSeni === 'prestasi' && (
+                      <div className="p-2.5 rounded-xl bg-purple-950/30 border border-purple-800/40">
+                        <div className="text-[9px] font-mono font-black uppercase text-purple-300 mb-2 flex items-center justify-between">
+                          <span>⚔️ TAMPILKAN SUDUT AKTIF (BAGAN PRESTASI)</span>
+                          {state.activeVSMatch?.winner && (
+                            <span className="text-amber-400 font-bold">
+                              Pemenang: Sudut {state.activeVSMatch.winner.toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {/* Merah Button */}
+                          {(() => {
+                            const merah = state.pesertaList.find(p => p.id === state.activeVSMatch?.merahPesertaId) || state.pesertaList.find(p => p.sudut === 'merah');
+                            const isMerahActive = state.activePesertaId === merah?.id;
+                            return (
+                              <button
+                                onClick={() => merah && handleSetActivePeserta(merah.id)}
+                                disabled={!merah}
+                                className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                                  isMerahActive
+                                    ? 'bg-red-600 border-red-400 text-white shadow-lg shadow-red-950/60 ring-2 ring-red-400'
+                                    : 'bg-red-950/30 border-red-800/40 text-red-300 hover:bg-red-900/40'
+                                } ${!merah ? 'opacity-40 cursor-not-allowed' : ''}`}
+                              >
+                                <div className="text-[8px] font-black uppercase tracking-wider font-mono opacity-80">
+                                  🔴 SUDUT MERAH {isMerahActive && '★ AKTIF'}
+                                </div>
+                                <div className="text-xs font-black uppercase truncate mt-0.5">
+                                  {merah ? merah.nama : 'Kosong'}
+                                </div>
+                                <div className="text-[9px] font-mono opacity-80 mt-1 flex justify-between">
+                                  <span>{merah?.kontingen || '-'}</span>
+                                  <span className="font-bold">{merah?.finalScore !== undefined ? merah.finalScore.toFixed(3) : '9.990'}</span>
+                                </div>
+                              </button>
+                            );
+                          })()}
+
+                          {/* Biru Button */}
+                          {(() => {
+                            const biru = state.pesertaList.find(p => p.id === state.activeVSMatch?.biruPesertaId) || state.pesertaList.find(p => p.sudut === 'biru');
+                            const isBiruActive = state.activePesertaId === biru?.id;
+                            return (
+                              <button
+                                onClick={() => biru && handleSetActivePeserta(biru.id)}
+                                disabled={!biru}
+                                className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
+                                  isBiruActive
+                                    ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-950/60 ring-2 ring-blue-400'
+                                    : 'bg-blue-950/30 border-blue-800/40 text-blue-300 hover:bg-blue-900/40'
+                                } ${!biru ? 'opacity-40 cursor-not-allowed' : ''}`}
+                              >
+                                <div className="text-[8px] font-black uppercase tracking-wider font-mono opacity-80">
+                                  🔵 SUDUT BIRU {isBiruActive && '★ AKTIF'}
+                                </div>
+                                <div className="text-xs font-black uppercase truncate mt-0.5">
+                                  {biru ? biru.nama : 'Kosong'}
+                                </div>
+                                <div className="text-[9px] font-mono opacity-80 mt-1 flex justify-between">
+                                  <span>{biru?.kontingen || '-'}</span>
+                                  <span className="font-bold">{biru?.finalScore !== undefined ? biru.finalScore.toFixed(3) : '9.990'}</span>
+                                </div>
+                              </button>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Active Peserta Selection Dropdown */}
                     <div>
                       <label className="block text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 font-mono">
                         PILIH PESERTA AKTIF YANG TAMPIL DI ARENA
@@ -824,7 +959,7 @@ export default function TGRSekretarisPanel({ state, dispatch, onBack, theme, onT
                         <option value="">-- PILIH PESERTA ARENA --</option>
                         {state.pesertaList.map(p => (
                           <option key={p.id} value={p.id}>
-                            No {p.noUrut} - {p.nama.toUpperCase()} ({p.kontingen.toUpperCase()} - {p.kategori})
+                            No {p.noUrut} - {p.nama.toUpperCase()} ({p.kontingen.toUpperCase()} - {p.kategori}) {p.sudut ? `[${p.sudut.toUpperCase()}]` : ''} {p.pool ? `[${p.pool}]` : ''}
                           </option>
                         ))}
                       </select>
@@ -1087,6 +1222,98 @@ export default function TGRSekretarisPanel({ state, dispatch, onBack, theme, onT
                       SIMPAN KONFIGURASI EVENT
                     </button>
                   </form>
+
+                  {/* Upload Logo Layar Monitor Section */}
+                  <div className="border-t border-slate-800 pt-3 mt-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="block text-[10px] text-amber-500 font-mono uppercase font-bold flex items-center gap-1">
+                        <ImageIcon className="w-3.5 h-3.5" />
+                        <span>Logo Layar Monitor (TGR & Partai)</span>
+                      </span>
+                      {(state.logoKiri || state.logoKanan || state.logoTengah) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            playBeep('warning');
+                            dispatch('TGR_UPLOAD_LOGOS', { logoKiri: null, logoKanan: null, logoTengah: null });
+                          }}
+                          className="text-[9px] text-red-500 hover:text-red-400 font-bold uppercase tracking-wider bg-transparent p-0 border-0 cursor-pointer"
+                        >
+                          Reset All
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => { playBeep('click'); fileInputKiriRef.current?.click(); }}
+                        className={`py-2 px-1 cursor-pointer hover:bg-slate-800 border text-[9px] uppercase font-bold rounded flex flex-col items-center justify-center gap-1 transition-all ${
+                          state.logoKiri ? 'bg-cyan-950/40 border-cyan-700 text-cyan-300' : 'bg-slate-900 border-slate-800 text-slate-400'
+                        }`}
+                        title="Upload Logo Kejuaraan (Kiri)"
+                      >
+                        {state.logoKiri ? (
+                          <img src={state.logoKiri} alt="Logo Kiri" className="w-5 h-5 object-contain" referrerPolicy="no-referrer" />
+                        ) : (
+                          <ImageIcon className="w-3.5 h-3.5 text-cyan-400" />
+                        )}
+                        <span className="truncate max-w-full">Logo Kiri</span>
+                      </button>
+                      <input
+                        type="file"
+                        ref={fileInputKiriRef}
+                        accept="image/*"
+                        onChange={(e) => handleLogoUpload('kiri', e)}
+                        className="hidden"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => { playBeep('click'); fileInputTengahRef.current?.click(); }}
+                        className={`py-2 px-1 cursor-pointer hover:bg-slate-800 border text-[9px] uppercase font-bold rounded flex flex-col items-center justify-center gap-1 transition-all ${
+                          state.logoTengah ? 'bg-amber-950/40 border-amber-700 text-amber-300' : 'bg-slate-900 border-slate-800 text-slate-400'
+                        }`}
+                        title="Upload Logo Event / Kejuaraan (Tengah)"
+                      >
+                        {state.logoTengah ? (
+                          <img src={state.logoTengah} alt="Logo Tengah" className="w-5 h-5 object-contain" referrerPolicy="no-referrer" />
+                        ) : (
+                          <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
+                        )}
+                        <span className="truncate max-w-full">Logo Tengah</span>
+                      </button>
+                      <input
+                        type="file"
+                        ref={fileInputTengahRef}
+                        accept="image/*"
+                        onChange={(e) => handleLogoUpload('tengah', e)}
+                        className="hidden"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => { playBeep('click'); fileInputKananRef.current?.click(); }}
+                        className={`py-2 px-1 cursor-pointer hover:bg-slate-800 border text-[9px] uppercase font-bold rounded flex flex-col items-center justify-center gap-1 transition-all ${
+                          state.logoKanan ? 'bg-red-950/40 border-red-700 text-red-300' : 'bg-slate-900 border-slate-800 text-slate-400'
+                        }`}
+                        title="Upload Logo IPSI (Kanan)"
+                      >
+                        {state.logoKanan ? (
+                          <img src={state.logoKanan} alt="Logo Kanan" className="w-5 h-5 object-contain" referrerPolicy="no-referrer" />
+                        ) : (
+                          <ImageIcon className="w-3.5 h-3.5 text-red-400" />
+                        )}
+                        <span className="truncate max-w-full">Logo Kanan</span>
+                      </button>
+                      <input
+                        type="file"
+                        ref={fileInputKananRef}
+                        accept="image/*"
+                        onChange={(e) => handleLogoUpload('kanan', e)}
+                        className="hidden"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1341,6 +1568,25 @@ export default function TGRSekretarisPanel({ state, dispatch, onBack, theme, onT
                   </button>
                 </div>
               </div>
+            </motion.div>
+          )}
+
+          {/* TAB 5: POOL MANAGEMENT (3-4+ PESERTA PER PARTAI) */}
+          {activeTab === 'pool_multi' && (
+            <motion.div
+              key="tab-pool-multi"
+              initial={{ opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -5 }}
+              className="h-full w-full"
+            >
+              <SekretarisSeniMultiPesertaPanel
+                tgrState={state}
+                dispatch={dispatch}
+                onClose={() => setActiveTab('control')}
+                theme={theme}
+                onToggleTheme={onToggleTheme}
+              />
             </motion.div>
           )}
 

@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Shield, Play, UserCheck, Zap, AlertTriangle, Coins, Sun, Moon, Lock, Maximize2, Minimize2 } from 'lucide-react';
 import { MatchState } from '../types';
 import { playBeep } from '../utils/sound';
+import ThemePaletteSelector from './ThemePaletteSelector';
 
 interface JuriPanelProps {
   juriId: 1 | 2 | 3;
@@ -125,6 +126,8 @@ export default function JuriPanel({ juriId, state, dispatch, onBack, theme, onTo
           >
             {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
           </button>
+
+          <ThemePaletteSelector compact={true} />
           
           <button
             onClick={toggleFullscreen}

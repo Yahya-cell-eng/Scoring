@@ -353,9 +353,18 @@ export default function TGRDewanPanel({ state, dispatch, onBack, theme }: TGRDew
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
           
-          <div className="px-4 py-1.5 rounded-full bg-red-950/40 border border-red-500/30 text-red-400 font-black font-sport text-xs tracking-wider uppercase flex items-center gap-2">
-            <Shield className="w-3.5 h-3.5 text-red-500" />
-            <span>DEWAN AUTHENTICATED</span>
+          <div className="flex items-center gap-2">
+            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase font-mono border ${
+              state.sistemSeni === 'prestasi'
+                ? 'bg-purple-950/50 border-purple-800/80 text-purple-300'
+                : 'bg-amber-950/50 border-amber-800/80 text-amber-300'
+            }`}>
+              {state.sistemSeni === 'prestasi' ? '⚔️ SISTEM PRESTASI' : '🏊 SISTEM POOL'}
+            </span>
+            <div className="px-3.5 py-1.5 rounded-full bg-red-950/40 border border-red-500/30 text-red-400 font-black font-sport text-xs tracking-wider uppercase flex items-center gap-2">
+              <Shield className="w-3.5 h-3.5 text-red-500" />
+              <span>DEWAN AUTHENTICATED</span>
+            </div>
           </div>
         </div>
       </header>

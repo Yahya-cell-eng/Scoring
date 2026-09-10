@@ -1,20 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { 
-  Download, FileText, Calendar, Clock, MapPin, Printer, Eye, RefreshCw, CheckSquare, Square, Info, Upload, Image as ImageIcon
+  Download, FileText, Calendar, Clock, MapPin, Printer, Eye, RefreshCw, CheckSquare, Square, Info, Upload, Image as ImageIcon, FileSpreadsheet, Check, ArrowUp, ArrowDown, Sparkles, Hash, Edit3
 } from 'lucide-react';
-import { MatchState, BaganCategory, BaganMatch } from '../types';
+import { MatchState, BaganCategory, BaganMatch, TGRState, TGRPeserta } from '../types';
 import { playBeep } from '../utils/sound';
 import safeHtml2canvas from '../utils/safeHtml2canvas';
 import { jsPDF } from 'jspdf';
+import { generateSchedulePdf, exportScheduleToExcel, printScheduleElement, ScheduleMatchRow, ScheduleMetadata } from '../utils/generateSchedulePdf';
+import AturUrutanPartaiModal from './AturUrutanPartaiModal';
+import EditJadwalPartaiModal from './EditJadwalPartaiModal';
+import { resequenceAndRenumberCategories, reorderSingleMatch, formatPartaiLabel } from '../utils/partaiOrdering';
 
 interface JadwalTabProps {
   theme: 'dark' | 'light';
   state: MatchState;
+  tgrState?: TGRState | null;
   dispatch: (type: string, payload?: any) => void;
 }
 
-export default function JadwalTab({ theme, state, dispatch }: JadwalTabProps) {
+export default function JadwalTab({ theme, state, tgrState, dispatch }: JadwalTabProps) {
   // Custom headers state
   const [headerTitle, setHeaderTitle] = useState("JADWAL PERTANDINGAN KEJUARAAN PENCAK SILAT");
   const [headerSubtitle, setHeaderSubtitle] = useState("TRI GUNA SAKTI CUP XIV");
@@ -86,6 +91,55 @@ export default function JadwalTab({ theme, state, dispatch }: JadwalTabProps) {
   // Ref to the printed element
   const printAreaRef = useRef<HTMLDivElement>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [showAturUrutanModal, setShowAturUrutanModal] = useState(false);
+  const [showEditJadwalModal, setShowEditJadwalModal] = useState(false);
+  const [editingTargetMatchId, setEditingTargetMatchId] = useState<string | null>(null);
+
+  const handleSaveCategories = (updatedCategories: BaganCategory[]) => {
+    dispatch('UPDATE_BAGAN_CATEGORIES', { categories: updatedCategories });
+    try {
+      localStorage.setItem('silat_bagan_categories', JSON.stringify(updatedCategories));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleSaveUrutanPartai = (updatedCategories: BaganCategory[]) => {
+    handleSaveCategories(updatedCategories);
+  };
+
+  const handleQuickRenumberAll = () => {
+    if (!state.baganCategories || state.baganCategories.length === 0) return;
+    playBeep('valid');
+    const { updatedCategories } = resequenceAndRenumberCategories(
+      state.baganCategories,
+      'per_nomor_saat_ini',
+      1
+    );
+    handleSaveUrutanPartai(updatedCategories);
+  };
+
+  const handleMoveMatchInSchedule = (uniqueId: string, direction: 'up' | 'down') => {
+    if (!state.baganCategories || state.baganCategories.length === 0) return;
+    playBeep('click');
+    const flattened = allMatches.map(m => ({
+      catId: m.catId,
+      catName: m.catName,
+      shortKelas: m.shortKelas,
+      gender: m.gender,
+      match: m.match,
+      originalPartai: m.match.partai,
+      numericPartai: parseInt(m.match.partai.replace(/\D/g, ''), 10) || 999,
+      roundRank: 1
+    }));
+    const { updatedCategories } = reorderSingleMatch(
+      state.baganCategories,
+      uniqueId,
+      direction,
+      flattened
+    );
+    handleSaveUrutanPartai(updatedCategories);
+  };
 
   // Helper to get short class abbreviation from category name
   const getShortKelasAbbreviation = (categoryName: string, gender: string): string => {
@@ -295,6 +349,100 @@ export default function JadwalTab({ theme, state, dispatch }: JadwalTabProps) {
 
   const filteredMatches = getFilteredMatches();
   const selectedMatchesToPrint = filteredMatches.filter(item => selectedMatchIds.includes(item.uniqueId));
+
+  // Build metadata for PDF and Excel generators
+  const getScheduleMetadata = (): ScheduleMetadata => ({
+    headerTitle,
+    headerSubtitle,
+    headerLocationDate: lokasiTanggal,
+    lokasiTanggal,
+    gelanggang: `GELANGGANG ${gelanggang}`,
+    hariTanggal,
+    sesiNama,
+    sesiWaktu,
+    fase,
+    tingkat,
+    layoutStyle: pdfLayout,
+    logoKiri: logoKiriType === 'image' ? logoKiriImage : null,
+    logoKanan: logoKananType === 'image' ? logoKananImage : null,
+    logoKiriText: logoKiriType === 'text' ? {
+      line1: logoKiriText1,
+      line2: logoKiriText2,
+      line3: logoKiriText3,
+      line4: logoKiriText4
+    } : undefined,
+    logoKananText: logoKananType === 'text' ? {
+      line1: logoKananText1,
+      line2: logoKananText2,
+      line3: logoKananText3
+    } : undefined,
+    showSignatures
+  });
+
+  // Build match rows for PDF and Excel generators
+  const getScheduleMatchRows = (): ScheduleMatchRow[] => {
+    return selectedMatchesToPrint.map((item, idx) => {
+      const match = item.match;
+      const merahNama = getEmptySlotLabel(item.catId, match.id, 'merah', match.atletMerah.nama);
+      const biruNama = getEmptySlotLabel(item.catId, match.id, 'biru', match.atletBiru.nama);
+      const merahKont = (!match.atletMerah.nama || match.atletMerah.nama.trim() === '' || match.atletMerah.nama.includes('...')) ? '-' : (match.atletMerah.kontingen || '-');
+      const biruKont = (!match.atletBiru.nama || match.atletBiru.nama.trim() === '' || match.atletBiru.nama.includes('...')) ? '-' : (match.atletBiru.kontingen || '-');
+
+      return {
+        no: idx + 1,
+        partai: match.partai.replace(/Partai\s+/i, ''),
+        kelas: item.shortKelas,
+        roundLabel: getRoundLabelIndo(match.round),
+        merahNama,
+        merahKontingen: merahKont,
+        biruNama,
+        biruKontingen: biruKont,
+        winner: match.winner,
+        remark: match.winner ? `Pemenang: ${match.winner.toUpperCase()}` : ''
+      };
+    });
+  };
+
+  // Direct High-Resolution Print using clean iframe isolation
+  const handlePrintSchedule = () => {
+    if (selectedMatchesToPrint.length === 0) {
+      alert("Harap pilih minimal 1 partai pertandingan untuk dicetak!");
+      return;
+    }
+    playBeep('valid');
+    if (printAreaRef.current) {
+      printScheduleElement(printAreaRef.current);
+    }
+  };
+
+  // Direct Excel Export (.xlsx)
+  const handleDownloadExcel = () => {
+    if (selectedMatchesToPrint.length === 0) {
+      alert("Harap pilih minimal 1 partai pertandingan untuk diekspor ke Excel!");
+      return;
+    }
+    playBeep('valid');
+    exportScheduleToExcel(getScheduleMetadata(), getScheduleMatchRows());
+  };
+
+  // Native Crisp Vector PDF Generator (Multi-page safe)
+  const handleDownloadVectorPdf = () => {
+    if (selectedMatchesToPrint.length === 0) {
+      alert("Harap pilih minimal 1 partai pertandingan untuk diunduh!");
+      return;
+    }
+    playBeep('valid');
+    setIsGeneratingPdf(true);
+    try {
+      generateSchedulePdf(getScheduleMetadata(), getScheduleMatchRows());
+    } catch (err) {
+      console.error("Vector PDF generation error:", err);
+      // Fallback to canvas
+      downloadPDF();
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
 
   // PDF Generator using html2canvas and jsPDF with offscreen cloning for maximum robustness
   const downloadPDF = async () => {
@@ -766,16 +914,49 @@ export default function JadwalTab({ theme, state, dispatch }: JadwalTabProps) {
 
         {/* Interactive Match Selector Table */}
         <div className="flex-1 flex flex-col min-h-0 border-t pt-3">
-          <div className="flex justify-between items-center mb-1.5">
-            <span className="text-[10px] uppercase tracking-wider font-extrabold text-emerald-400">
-              6. Daftar Partai ({filteredMatches.length})
-            </span>
-            <button 
-              onClick={toggleSelectAll}
-              className="text-[10px] text-emerald-505 hover:text-emerald-400 font-bold underline cursor-pointer"
-            >
-              Pilih Semua / Reset
-            </button>
+          <div className="flex flex-col gap-1.5 mb-2">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] uppercase tracking-wider font-extrabold text-emerald-400">
+                6. Daftar & Urutan Partai ({filteredMatches.length})
+              </span>
+              <button 
+                onClick={toggleSelectAll}
+                className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold underline cursor-pointer"
+              >
+                Pilih Semua / Reset
+              </button>
+            </div>
+
+            {/* Quick Action Re-sequencing & Edit Toolbar */}
+            <div className="grid grid-cols-3 gap-1.5">
+              <button
+                type="button"
+                onClick={() => { playBeep('click'); setEditingTargetMatchId(null); setShowEditJadwalModal(true); }}
+                className="px-2 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded text-[10px] font-black uppercase flex items-center justify-center gap-1 shadow-md cursor-pointer transition-all active:scale-95"
+                title="Koreksi Nama Pesilat, Kontingen, Babak, atau Nomor Partai Sebelum Dicetak"
+              >
+                <Edit3 className="w-3 h-3 text-emerald-200" />
+                <span>✏️ Edit Jadwal</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { playBeep('click'); setShowAturUrutanModal(true); }}
+                className="px-2 py-1.5 bg-gradient-to-r from-purple-700 to-indigo-700 hover:from-purple-600 hover:to-indigo-600 text-white rounded text-[10px] font-black uppercase flex items-center justify-center gap-1 shadow cursor-pointer transition-all active:scale-95"
+                title="Atur Urutan Partai (Standar IPSI / Babak / Kategori)"
+              >
+                <Sparkles className="w-3 h-3 text-amber-300" />
+                <span>Urutan IPSI</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleQuickRenumberAll}
+                className="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded text-[10px] font-bold uppercase flex items-center justify-center gap-1 border border-slate-700 cursor-pointer transition-all active:scale-95"
+                title="Nomor ulang otomatis Partai 1..N dari urutan saat ini"
+              >
+                <Hash className="w-3 h-3 text-emerald-400" />
+                <span>Nomor 1..N</span>
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto border border-slate-800/60 rounded-lg bg-slate-950/30">
@@ -787,15 +968,19 @@ export default function JadwalTab({ theme, state, dispatch }: JadwalTabProps) {
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-950/80 border-b border-slate-800 text-slate-400 text-[10px] uppercase font-mono">
-                    <th className="p-2 w-10">Pilih</th>
+                    <th className="p-2 w-7 text-center">Pilih</th>
                     <th className="p-2 w-14">Partai</th>
-                    <th className="p-2 w-14">Kelas</th>
+                    <th className="p-2 w-12">Kelas</th>
                     <th className="p-2">Pesilat</th>
+                    <th className="p-2 w-14 text-center">Aksi</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredMatches.map((m) => {
+                  {filteredMatches.map((m, idx) => {
                     const isSelected = selectedMatchIds.includes(m.uniqueId);
+                    const isFirst = idx === 0;
+                    const isLast = idx === filteredMatches.length - 1;
+
                     return (
                       <tr 
                         key={m.uniqueId}
@@ -805,7 +990,7 @@ export default function JadwalTab({ theme, state, dispatch }: JadwalTabProps) {
                         }`}
                       >
                         <td className="p-2 text-center" onClick={(e) => e.stopPropagation()}>
-                          <button onClick={() => toggleMatchSelection(m.uniqueId)} className="text-emerald-500">
+                          <button onClick={() => toggleMatchSelection(m.uniqueId)} className="text-emerald-500 cursor-pointer">
                             {isSelected ? (
                               <CheckSquare className="w-4 h-4" />
                             ) : (
@@ -813,17 +998,53 @@ export default function JadwalTab({ theme, state, dispatch }: JadwalTabProps) {
                             )}
                           </button>
                         </td>
-                        <td className="p-2 font-black font-mono text-amber-500">{m.match.partai}</td>
-                        <td className="p-2 font-bold text-slate-300">{m.shortKelas}</td>
+                        <td className="p-2 font-black font-mono text-amber-400 text-[11px] whitespace-nowrap">
+                          {m.match.partai}
+                        </td>
+                        <td className="p-2 font-bold text-slate-300 whitespace-nowrap">{m.shortKelas}</td>
                         <td className="p-2">
                           <div className="text-[10px] leading-tight">
-                            <span className="text-red-400 font-medium">
+                            <span className="text-red-400 font-medium truncate block max-w-[120px]">
                               {getEmptySlotLabel(m.catId, m.match.id, 'merah', m.match.atletMerah.nama)}
                             </span>
-                            <span className="text-slate-500 mx-1">vs</span>
-                            <span className="text-blue-400 font-medium">
+                            <span className="text-slate-500 text-[9px]">vs</span>
+                            <span className="text-blue-400 font-medium truncate block max-w-[120px]">
                               {getEmptySlotLabel(m.catId, m.match.id, 'biru', m.match.atletBiru.nama)}
                             </span>
+                          </div>
+                        </td>
+                        <td className="p-2 text-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-0.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                playBeep('click');
+                                setEditingTargetMatchId(m.uniqueId);
+                                setShowEditJadwalModal(true);
+                              }}
+                              className="p-1 rounded bg-purple-950/80 hover:bg-purple-900 text-purple-300 hover:text-white border border-purple-800/60 cursor-pointer"
+                              title="Edit / Koreksi Data Partai Ini"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isFirst}
+                              onClick={() => handleMoveMatchInSchedule(m.uniqueId, 'up')}
+                              className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer"
+                              title="Geser Partai Naik"
+                            >
+                              <ArrowUp className="w-3 h-3" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isLast}
+                              onClick={() => handleMoveMatchInSchedule(m.uniqueId, 'down')}
+                              className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white disabled:opacity-20 disabled:cursor-not-allowed cursor-pointer"
+                              title="Geser Partai Turun"
+                            >
+                              <ArrowDown className="w-3 h-3" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -835,28 +1056,61 @@ export default function JadwalTab({ theme, state, dispatch }: JadwalTabProps) {
           </div>
         </div>
 
-        {/* Download Button */}
-        <button
-          onClick={downloadPDF}
-          disabled={isGeneratingPdf || selectedMatchesToPrint.length === 0}
-          className={`w-full py-2.5 rounded-lg font-black text-xs uppercase flex items-center justify-center gap-2 transition-all cursor-pointer ${
-            isGeneratingPdf || selectedMatchesToPrint.length === 0
-              ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-990/45'
-          }`}
-        >
-          {isGeneratingPdf ? (
-            <>
-              <RefreshCw className="w-4 h-4 animate-spin" />
-              Menyusun PDF...
-            </>
-          ) : (
-            <>
-              <Download className="w-4 h-4" />
-              Unduh Jadwal Pertandingan PDF
-            </>
-          )}
-        </button>
+        {/* Action Buttons: Print, PDF, and Excel */}
+        <div className="space-y-2 pt-2 border-t border-slate-800">
+          <div className="grid grid-cols-2 gap-2">
+            {/* Direct Print Button */}
+            <button
+              onClick={handlePrintSchedule}
+              disabled={selectedMatchesToPrint.length === 0}
+              className={`py-2.5 px-3 rounded-lg font-black text-[11px] uppercase flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                selectedMatchesToPrint.length === 0
+                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-500 text-white shadow-md shadow-blue-900/30'
+              }`}
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Cetak (Print)</span>
+            </button>
+
+            {/* Excel Download Button */}
+            <button
+              onClick={handleDownloadExcel}
+              disabled={selectedMatchesToPrint.length === 0}
+              className={`py-2.5 px-3 rounded-lg font-black text-[11px] uppercase flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                selectedMatchesToPrint.length === 0
+                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                  : 'bg-emerald-700 hover:bg-emerald-600 text-white shadow-md shadow-emerald-950/40'
+              }`}
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-200" />
+              <span>Ekspor Excel</span>
+            </button>
+          </div>
+
+          {/* Primary PDF Download Button (Crisp Vector / IPSI Standard) */}
+          <button
+            onClick={handleDownloadVectorPdf}
+            disabled={isGeneratingPdf || selectedMatchesToPrint.length === 0}
+            className={`w-full py-3 rounded-lg font-black text-xs uppercase flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              isGeneratingPdf || selectedMatchesToPrint.length === 0
+                ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-950/50'
+            }`}
+          >
+            {isGeneratingPdf ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Menyusun PDF Resmi...</span>
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                <span>Unduh Jadwal Resmi PDF (A4)</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* RIGHT PANEL: Live PDF Page Preview */}
@@ -865,7 +1119,32 @@ export default function JadwalTab({ theme, state, dispatch }: JadwalTabProps) {
           <span className="text-xs uppercase font-mono font-black text-slate-400 flex items-center gap-1.5">
             <Eye className="w-3.5 h-3.5 text-indigo-400" /> Live PDF Page Layout Preview (A4 Scale)
           </span>
-          <span className="text-[10px] text-slate-500">Hasil unduhan akan presisi 100% seperti di bawah</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { playBeep('click'); setEditingTargetMatchId(null); setShowEditJadwalModal(true); }}
+              className="px-2.5 py-1 text-[10px] font-bold uppercase rounded bg-purple-900 hover:bg-purple-800 text-purple-200 border border-purple-500/40 flex items-center gap-1 transition-all cursor-pointer shadow"
+              title="Koreksi nama atau partai langsung di jadwal"
+            >
+              <Edit3 className="w-3 h-3 text-purple-400" />
+              <span>Koreksi / Edit Jadwal</span>
+            </button>
+            <button
+              onClick={handlePrintSchedule}
+              disabled={selectedMatchesToPrint.length === 0}
+              className="px-2.5 py-1 text-[10px] font-bold uppercase rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center gap-1 transition-all cursor-pointer disabled:opacity-40"
+            >
+              <Printer className="w-3 h-3 text-blue-400" />
+              <span>Cetak Cepat</span>
+            </button>
+            <button
+              onClick={handleDownloadVectorPdf}
+              disabled={isGeneratingPdf || selectedMatchesToPrint.length === 0}
+              className="px-2.5 py-1 text-[10px] font-bold uppercase rounded bg-emerald-700 hover:bg-emerald-600 text-white flex items-center gap-1 transition-all cursor-pointer disabled:opacity-40"
+            >
+              <Download className="w-3 h-3" />
+              <span>Unduh PDF</span>
+            </button>
+          </div>
         </div>
 
         {/* PDF Page Canvas Wrapper */}
@@ -874,7 +1153,7 @@ export default function JadwalTab({ theme, state, dispatch }: JadwalTabProps) {
           {/* Exact PDF Layout structured on A4 standard ratio */}
           <div 
             ref={printAreaRef}
-            className="w-[794px] bg-white text-black p-8 font-sans shadow-2xl relative select-none"
+            className="printable-schedule-area w-[794px] bg-white text-black p-8 font-sans shadow-2xl relative select-none"
             style={{ minHeight: '1123px', fontFamily: '"Arial", "Helvetica", sans-serif' }}
           >
             {pdfLayout === 'classic' ? (
@@ -1248,6 +1527,35 @@ export default function JadwalTab({ theme, state, dispatch }: JadwalTabProps) {
 
         </div>
       </div>
+
+      {/* Atur & Perbaiki Urutan Partai Modal */}
+      <AturUrutanPartaiModal
+        isOpen={showAturUrutanModal}
+        onClose={() => setShowAturUrutanModal(false)}
+        categories={state.baganCategories || []}
+        onSave={handleSaveUrutanPartai}
+      />
+
+      {/* Edit & Koreksi Jadwal Partai Modal (Tanding & Seni) */}
+      <EditJadwalPartaiModal
+        isOpen={showEditJadwalModal}
+        onClose={() => {
+          setShowEditJadwalModal(false);
+          setEditingTargetMatchId(null);
+        }}
+        categories={state.baganCategories || []}
+        onSaveCategories={handleSaveCategories}
+        tgrState={tgrState}
+        onSaveTgrPeserta={(updatedPeserta) => {
+          dispatch('TGR_UPDATE_PESERTA', { action: 'sync_list', pesertaList: updatedPeserta });
+          try {
+            localStorage.setItem('tgr_peserta_list', JSON.stringify(updatedPeserta));
+          } catch (e) {
+            console.error(e);
+          }
+        }}
+        targetMatchId={editingTargetMatchId}
+      />
 
     </div>
   );

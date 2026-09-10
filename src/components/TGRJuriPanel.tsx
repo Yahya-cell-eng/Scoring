@@ -303,14 +303,34 @@ export default function TGRJuriPanel({ juriId, state, dispatch, onBack, theme }:
 
         {/* Center Section: Sudut / Team Highlight Pill & Mode Switcher */}
         <div className="flex items-center gap-1.5 sm:gap-2">
-          <div className="hidden xs:flex items-center gap-1.5 bg-slate-900/60 p-1 rounded-full border border-slate-800">
-            <span className="bg-blue-600 text-white px-2.5 sm:px-3.5 py-0.5 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider shadow">
-              BIRU
-            </span>
-            <span className="text-slate-500 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">
-              MERAH
-            </span>
-          </div>
+          {state.sistemSeni === 'prestasi' ? (
+            <div className="hidden xs:flex items-center gap-1.5 bg-slate-900/60 p-1 rounded-full border border-slate-800">
+              <span className={`px-2.5 sm:px-3.5 py-0.5 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider ${
+                activePeserta?.sudut === 'merah'
+                  ? 'bg-red-600 text-white shadow-md shadow-red-900/50 scale-105'
+                  : 'text-slate-500'
+              }`}>
+                MERAH
+              </span>
+              <span className={`px-2.5 sm:px-3.5 py-0.5 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider ${
+                activePeserta?.sudut === 'biru'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-900/50 scale-105'
+                  : 'text-slate-500'
+              }`}>
+                BIRU
+              </span>
+            </div>
+          ) : (
+            <div className="hidden xs:flex items-center gap-1.5 bg-slate-900/60 px-3 py-1 rounded-full border border-slate-800">
+              <span className="text-[9px] sm:text-[10px] font-mono font-black uppercase text-amber-400">
+                {activePeserta?.pool || 'POOL A'}
+              </span>
+              <span className="text-slate-600">|</span>
+              <span className="text-[9px] sm:text-[10px] font-mono font-black uppercase text-slate-300">
+                UNDIAN #{activePeserta?.noUndian || activePeserta?.noUrut || 1}
+              </span>
+            </div>
+          )}
 
           {/* Mode Switcher Button */}
           <button

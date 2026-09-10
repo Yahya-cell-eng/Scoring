@@ -23,3 +23,54 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #334155;
 }
+
+/* Official Print Rules for Schedule & Reports */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm;
+  }
+  
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide all non-printable elements */
+  nav, button, input, select, textarea, .no-print,
+  [role="dialog"] > div:not(.printable-schedule-area),
+  header, footer, aside {
+    display: none !important;
+  }
+
+  .printable-schedule-area {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .printable-schedule-area table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto !important;
+  }
+
+  .printable-schedule-area tr {
+    page-break-inside: avoid !important;
+    page-break-after: auto !important;
+  }
+
+  .printable-schedule-area td,
+  .printable-schedule-area th {
+    border: 1px solid #000000 !important;
+  }
+}
