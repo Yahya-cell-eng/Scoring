@@ -373,6 +373,22 @@ export default function GoogleSheetsIntegrationModal({
     setTimeout(() => setIsCopiedScript(false), 2500);
   };
 
+  const handleDownloadScriptFile = () => {
+    const blob = new Blob([APPS_SCRIPT_SAMPLE_CODE], { type: 'text/javascript' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Code.gs';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setStatusMessage({
+      text: 'File skrip "Code.gs" berhasil diunduh! Siap dibuka atau di-paste di Google Apps Script.',
+      type: 'success'
+    });
+  };
+
   const handleToggleAutoSync = (val: boolean) => {
     setAutoSync(val);
     setAutoSyncEnabled(val);
@@ -900,18 +916,29 @@ export default function GoogleSheetsIntegrationModal({
                   </ol>
                 </div>
 
-                {/* Script snippet with 1-click copy */}
+                {/* Script snippet with 1-click copy & download */}
                 <div className="relative">
-                  <pre className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-purple-200 overflow-x-auto max-h-40">
+                  <pre className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-purple-200 overflow-x-auto max-h-40 pb-12 sm:pb-3.5">
                     {APPS_SCRIPT_SAMPLE_CODE}
                   </pre>
-                  <button
-                    onClick={handleCopyAppsScript}
-                    className="absolute top-2.5 right-2.5 px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-mono text-[11px] flex items-center gap-1.5 shadow-md cursor-pointer transition-colors"
-                  >
-                    {isCopiedScript ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{isCopiedScript ? 'Tersalin!' : 'Salin Skrip'}</span>
-                  </button>
+                  <div className="absolute top-2.5 right-2.5 flex items-center gap-2">
+                    <button
+                      onClick={handleDownloadScriptFile}
+                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white font-mono text-[11px] flex items-center gap-1.5 shadow-md cursor-pointer border border-slate-700 transition-colors"
+                      title="Unduh file Code.gs"
+                    >
+                      <Download className="w-3.5 h-3.5 text-purple-300" />
+                      <span>Unduh Code.gs</span>
+                    </button>
+                    <button
+                      onClick={handleCopyAppsScript}
+                      className="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-mono text-[11px] flex items-center gap-1.5 shadow-md cursor-pointer transition-colors"
+                      title="Salin seluruh kode ke clipboard"
+                    >
+                      {isCopiedScript ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{isCopiedScript ? 'Tersalin!' : 'Salin Skrip'}</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Webhook URL input */}

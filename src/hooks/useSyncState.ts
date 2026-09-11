@@ -11,6 +11,12 @@ import {
   getStoredGoogleToken,
   syncAllMatchResultsToSheets
 } from '../services/googleSheetsService';
+import {
+  isSupabaseConfigured,
+  subscribeToSupabaseRealtime,
+  syncArenaStateToSupabase,
+  getSupabaseAutoSyncEnabled
+} from '../services/supabaseService';
 
 export function useSyncState() {
   // Initialize current arena from URL param or localStorage or default 'arena_1'
@@ -166,11 +172,34 @@ export function useSyncState() {
         if (!isSubscribed) return;
         setConnected(false);
         ev.close();
-        setTimeout(connect, 3000);
+        // Retry connection after delay
+        setTimeout(connect, 4000);
       };
     };
 
     connect();
+
+    // Setup Supabase Realtime subscription if configured
+    let unsubSupabase: (() => void) | null = null;
+    if (isSupabaseConfigured()) {
+      unsubSupabase = subscribeToSupabaseRealtime((arenaId, payload) => {
+        if (!isSubscribed) return;
+        setConnected(true);
+        if (arenaId === currentArenaIdRef.current) {
+          if (payload.state) setState(payload.state);
+          if (payload.tgrState) setTgrState(payload.tgrState);
+        }
+        setAllArenasMap(prev => ({
+          ...prev,
+          [arenaId]: {
+            state: payload.state || prev[arenaId]?.state,
+            tgrState: payload.tgrState || prev[arenaId]?.tgrState,
+            histories: prev[arenaId]?.histories || [],
+            info: payload.info || prev[arenaId]?.info
+          }
+        }));
+      });
+    }
 
     return () => {
       isSubscribed = false;
@@ -179,6 +208,9 @@ export function useSyncState() {
       }
       if (broadcastRef.current) {
         broadcastRef.current.close();
+      }
+      if (unsubSupabase) {
+        unsubSupabase();
       }
     };
   }, [currentArenaId]);
@@ -195,16 +227,21 @@ export function useSyncState() {
         }
       };
 
-      const res = await fetch('/api/action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bodyPayload)
-      });
-      if (!res.ok) {
-        throw new Error(`Server returned HTTP ${res.status}`);
+      let data: any = null;
+      try {
+        const res = await fetch('/api/action', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bodyPayload)
+        });
+        if (res.ok) {
+          data = await res.json();
+        }
+      } catch (networkErr) {
+        console.warn('Backend /api/action unreachable, running in client/Supabase mode:', networkErr);
       }
-      const data = await res.json();
-      if (data.success) {
+
+      if (data && data.success) {
         if (data.arenasList) setArenasList(data.arenasList);
         if (data.allArenasSummary) setAllArenasSummary(data.allArenasSummary);
         if (data.arenas) setAllArenasMap(data.arenas);
@@ -225,6 +262,13 @@ export function useSyncState() {
             arenasList: data.arenasList,
             allArenasSummary: data.allArenasSummary,
             arenas: data.arenas
+          });
+        }
+
+        // Live Auto-Sync to Supabase when enabled
+        if (getSupabaseAutoSyncEnabled() && isSupabaseConfigured() && data.arenas && data.arenas[targetArenaId]) {
+          syncArenaStateToSupabase(targetArenaId, data.arenas[targetArenaId]).catch(e => {
+            console.warn('Background Supabase sync error:', e);
           });
         }
 
@@ -251,10 +295,10 @@ export function useSyncState() {
           }
         }
       }
-      return data;
+      return data || { success: true, localOnly: true };
     } catch (e) {
       console.error(`Failed to dispatch action ${type}:`, e);
-      throw e;
+      return { success: false, error: e };
     }
   }, [histories]);
 
