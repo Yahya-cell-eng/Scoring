@@ -56,8 +56,6 @@ export interface BaganMatch {
   atletMerah: Athlete;
   atletBiru: Athlete;
   winner: 'merah' | 'biru' | null;
-  gelanggang?: string;
-  arenaId?: string;
 }
 
 export interface BaganCategory {
@@ -68,8 +66,6 @@ export interface BaganCategory {
   matches: BaganMatch[];
   kelas?: string;
   usia?: string;
-  gelanggang?: string;
-  arenaId?: string;
 }
 
 export interface MatchState {
@@ -260,5 +256,94 @@ export interface ArenaSummary {
   seniTimerSeconds?: number;
   totalPesertaSeni?: number;
   totalHistories?: number;
+}
+
+export interface MasterTournamentInfo {
+  namaEvent: string;
+  subJudul?: string;
+  lokasi?: string;
+  tanggalMulai?: string;
+  tanggalSelesai?: string;
+  tingkatKejuaraan?: string;
+  penyelenggara?: string;
+  delegasiTeknis?: string;
+  ketuaPertandinganUtama?: string;
+  dewanWasitUtama?: string;
+  aturanVersi?: string;
+  logoKiri?: string | null;
+  logoKanan?: string | null;
+  logoTengah?: string | null;
+  updatedAt?: string;
+}
+
+export interface MasterReferee {
+  id: string;
+  nama: string;
+  lisensi: 'Internasional' | 'Nasional 1' | 'Nasional 2' | 'Daerah' | 'Kader';
+  pengprov: string;
+  kategoriTugas: 'Semua' | 'Tanding' | 'Seni';
+  nomorRegistrasi?: string;
+  telepon?: string;
+  status: 'aktif' | 'cadangan' | 'istirahat';
+  catatan?: string;
+}
+
+export interface ArenaAssignment {
+  arenaId: string;
+  namaGelanggang: string;
+  ketuaPertandinganId?: string | null;
+  dewanId?: string | null;
+  wasitUtamaId?: string | null;
+  juri1Id?: string | null;
+  juri2Id?: string | null;
+  juri3Id?: string | null;
+  juriCadanganId?: string | null;
+  seniJuriIds?: { [juriKey: string]: string | null };
+  shift?: string;
+  status?: 'siap' | 'bertugas' | 'rotasi';
+  catatan?: string;
+}
+
+export interface AdminUser {
+  username: string;
+  displayName: string;
+  role: 'superadmin' | 'admin';
+  lastLogin?: string;
+}
+
+export interface MasterDataState {
+  tournament: MasterTournamentInfo;
+  referees: MasterReferee[];
+  assignments: Record<string, ArenaAssignment>;
+  auditLogs: {
+    id: string;
+    timestamp: string;
+    admin: string;
+    action: string;
+    details?: string;
+  }[];
+}
+
+export interface StorageFileInfo {
+  name: string;
+  sizeBytes: number;
+  formattedSize: string;
+  lastModified: string;
+  itemCount?: number;
+  description: string;
+}
+
+export interface StorageStatus {
+  status: 'active' | 'saving' | 'error';
+  folderPath: string;
+  lastSaved: string | null;
+  saveCount: number;
+  files: StorageFileInfo[];
+  stats: {
+    totalArenas: number;
+    totalHistories: number;
+    totalReferees: number;
+    tournamentName: string;
+  };
 }
 

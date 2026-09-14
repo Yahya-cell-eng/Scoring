@@ -25,6 +25,7 @@ import RegistrasiDataPanel from './components/RegistrasiDataPanel';
 import PanelPortal from './components/PanelPortal';
 import LandscapeWrapper from './components/LandscapeWrapper';
 import { playBeep } from './utils/sound';
+import { AdminPanel } from './components/AdminPanel';
 
 export default function App() {
   const {
@@ -37,17 +38,19 @@ export default function App() {
     selectArena,
     arenasList,
     allArenasSummary,
-    allArenasMap
+    allArenasMap,
+    masterData
   } = useSyncState();
 
-  // Mode: 'portal' | 'tanding' | 'seni'
-  const [activeMode, setActiveMode] = useState<'portal' | 'tanding' | 'seni'>(() => {
+  // Mode: 'portal' | 'tanding' | 'seni' | 'admin'
+  const [activeMode, setActiveMode] = useState<'portal' | 'tanding' | 'seni' | 'admin'>(() => {
     const params = new URLSearchParams(window.location.search);
     const mode = params.get('mode');
-    if (mode === 'tanding' || mode === 'seni') return mode;
+    if (mode === 'tanding' || mode === 'seni' || mode === 'admin') return mode as any;
 
     // Support deep link by inferring mode from role
     const role = params.get('role');
+    if (role === 'admin') return 'admin';
     if (role) {
       if (['ketua', 'juri4', 'juri5', 'juri6', 'juri7', 'juri8', 'juri9', 'juri10'].includes(role)) {
         return 'seni';
@@ -78,7 +81,7 @@ export default function App() {
     localStorage.setItem('theme', newTheme);
   };
 
-  const handleSelectMode = (mode: 'tanding' | 'seni' | 'monitor_urutan', targetRole?: string) => {
+  const handleSelectMode = (mode: 'tanding' | 'seni' | 'monitor_urutan' | 'admin', targetRole?: string) => {
     const params = new URLSearchParams(window.location.search);
     if (mode === 'monitor_urutan') {
       params.set('mode', 'tanding');
@@ -86,6 +89,14 @@ export default function App() {
       window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
       setActiveMode('tanding');
       setActiveRole('monitor_urutan');
+      return;
+    }
+    if (mode === 'admin') {
+      params.set('mode', 'admin');
+      params.set('role', 'admin');
+      window.history.pushState({}, '', `${window.location.pathname}?${params.toString()}`);
+      setActiveMode('admin');
+      setActiveRole('admin');
       return;
     }
     const roleToSet = targetRole || 'landing';
@@ -170,6 +181,19 @@ export default function App() {
         arenasList={arenasList}
         allArenasSummary={allArenasSummary}
         allArenasMap={allArenasMap}
+      />
+    );
+  }
+
+  // 1.5 ADMIN PANEL (PROTECTED MASTER DATA MANAGEMENT)
+  if (activeMode === 'admin' || activeRole === 'admin') {
+    return (
+      <AdminPanel
+        onBackToPortal={handleBackToPortal}
+        masterData={masterData}
+        arenasList={arenasList}
+        currentArenaId={currentArenaId}
+        onSelectArena={selectArena}
       />
     );
   }

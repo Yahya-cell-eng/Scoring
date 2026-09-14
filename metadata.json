@@ -1,6 +1,6 @@
 {
   "name": "Skoring Pencak Silat",
-  "description": "Sistem skoring digital real-time untuk pertandingan Pencak Silat terhubung Google Sheets, Supabase, dan siap deploy di Netlify & GitHub",
+  "description": "Sistem skoring digital real-time untuk pertandingan Pencak Silat lengkap dengan Admin Panel master data turnamen, wasit, dan arena.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

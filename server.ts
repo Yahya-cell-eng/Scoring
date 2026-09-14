@@ -20,12 +20,48 @@ import {
   determineArenaWinner,
   updateArenaBaganWinner
 } from './server/arenas';
+import {
+  masterDataState,
+  createAdminSession,
+  verifyAdminToken,
+  revokeAdminSession,
+  addAuditLog,
+  syncTournamentToAllArenas,
+  adminCredentials,
+  defaultTournamentInfo,
+  defaultReferees,
+  defaultAssignments
+} from './server/masterData';
+import {
+  initLocalStorage,
+  saveLocalStorage,
+  getLocalStorageStatus,
+  createLocalBackup,
+  exportFullDatabase,
+  importFullDatabase
+} from './server/storage';
 
 const app = express();
 const PORT = 3000;
 
-// Enable JSON parse parsing
+// Enable JSON parsing
 app.use(express.json({ limit: '10mb' }));
+
+// Initialize persistent server local storage immediately on startup
+initLocalStorage();
+
+// Graceful shutdown hooks to ensure all state is flushed to disk
+process.on('SIGINT', () => {
+  console.log('[Server] Menerima sinyal SIGINT, menyimpan data ke server lokal...');
+  saveLocalStorage(true);
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('[Server] Menerima sinyal SIGTERM, menyimpan data ke server lokal...');
+  saveLocalStorage(true);
+  process.exit(0);
+});
 
 // SSE connections list
 let sseClients: any[] = [];
@@ -61,7 +97,8 @@ const broadcastState = (specificArenaId?: string) => {
       tgrState: clientArena.tgrState,
       arenasList,
       allArenasSummary,
-      arenas: arenasFullMap
+      arenas: arenasFullMap,
+      masterData: masterDataState
     });
 
     try {
@@ -86,6 +123,7 @@ setInterval(() => {
           arena.state.matchStatus = 'babak_habis';
         } else {
           determineArenaWinner(arena);
+          saveLocalStorage(true);
         }
       }
       changed = true;
@@ -107,6 +145,7 @@ setInterval(() => {
 
   if (changed) {
     broadcastState();
+    saveLocalStorage();
   }
 }, 1000);
 
@@ -130,7 +169,8 @@ app.get('/api/events', (req, res) => {
     tgrState: arena.tgrState,
     arenasList: getArenasList(),
     allArenasSummary: getArenasSummary(),
-    arenas: getArenasMapData()
+    arenas: getArenasMapData(),
+    masterData: masterDataState
   });
 
   res.write(`data: ${initialPayload}\n\n`);
@@ -140,68 +180,6 @@ app.get('/api/events', (req, res) => {
   req.on('close', () => {
     sseClients = sseClients.filter(client => client !== res);
   });
-});
-
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
-});
-
-// Proxy endpoint to read Google Sheets CSV without CORS or auth issues
-app.get('/api/sheets/read', async (req, res) => {
-  try {
-    const id = req.query.id as string;
-    const sheet = (req.query.sheet as string) || '';
-    if (!id) {
-      return res.status(400).json({ error: 'Spreadsheet ID atau URL diperlukan' });
-    }
-
-    const cleanId = id.trim().replace(/^.*\/d\/([a-zA-Z0-9-_]+).*$/, '$1');
-    const url = sheet
-      ? `https://docs.google.com/spreadsheets/d/${encodeURIComponent(cleanId)}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheet)}`
-      : `https://docs.google.com/spreadsheets/d/${encodeURIComponent(cleanId)}/gviz/tq?tqx=out:csv`;
-
-    const response = await fetch(url);
-    if (!response.ok) {
-      return res.status(response.status).json({
-        error: `Gagal membaca sheet dari Google (${response.status} ${response.statusText}). Pastikan hak akses spreadsheet diatur: "Siapa saja yang memiliki link dapat melihat".`
-      });
-    }
-
-    const csvText = await response.text();
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.send(csvText);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Server error saat membaca Google Sheets' });
-  }
-});
-
-// Proxy endpoint to forward data to Google Apps Script Webhook
-app.post('/api/sheets/webhook-proxy', async (req, res) => {
-  try {
-    const { webhookUrl, payload } = req.body;
-    if (!webhookUrl) {
-      return res.status(400).json({ error: 'Webhook URL diperlukan' });
-    }
-
-    const response = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    const text = await response.text();
-    let data;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = { raw: text };
-    }
-
-    res.json({ success: response.ok, status: response.status, data });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Gagal mengirim data ke Webhook Google Apps Script' });
-  }
 });
 
 // REST API endpoint to query state
@@ -215,7 +193,8 @@ app.get('/api/state', (req, res) => {
     arenaId: arena.info.id,
     arenasList: getArenasList(),
     allArenasSummary: getArenasSummary(),
-    arenas: getArenasMapData()
+    arenas: getArenasMapData(),
+    masterData: masterDataState
   });
 });
 
@@ -224,8 +203,346 @@ app.get('/api/arenas', (req, res) => {
   res.json({
     arenasList: getArenasList(),
     allArenasSummary: getArenasSummary(),
-    arenas: getArenasMapData()
+    arenas: getArenasMapData(),
+    masterData: masterDataState
   });
+});
+
+// ==========================================
+// PROTECTED MASTER DATA & ADMIN AUTH API
+// ==========================================
+
+// 1. Admin Login
+app.post('/api/admin/login', (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ success: false, error: 'Username dan password wajib diisi.' });
+  }
+
+  const account = adminCredentials.find(
+    acc => acc.username.toLowerCase() === username.trim().toLowerCase() && acc.passwordHash === password
+  );
+
+  if (!account) {
+    return res.status(401).json({
+      success: false,
+      error: 'Autentikasi gagal. Username atau password administrator tidak valid.'
+    });
+  }
+
+  const { token, user } = createAdminSession(account.username);
+  addAuditLog(user.username, 'LOGIN_SUKSES', `Administrator ${user.displayName} berhasil login ke AdminPanel.`);
+  broadcastState();
+
+  return res.json({
+    success: true,
+    token,
+    user,
+    masterData: masterDataState
+  });
+});
+
+// 2. Admin Session Verification
+app.get('/api/admin/verify', (req, res) => {
+  const authHeader = req.headers.authorization;
+  const user = verifyAdminToken(authHeader);
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Sesi administrator tidak valid atau sudah kedaluwarsa.' });
+  }
+
+  return res.json({
+    success: true,
+    user,
+    masterData: masterDataState
+  });
+});
+
+// 3. Admin Logout
+app.post('/api/admin/logout', (req, res) => {
+  const authHeader = req.headers.authorization;
+  const user = verifyAdminToken(authHeader);
+  if (user) {
+    addAuditLog(user.username, 'LOGOUT', `Administrator ${user.displayName} keluar dari sistem.`);
+  }
+  revokeAdminSession(authHeader);
+  return res.json({ success: true, message: 'Berhasil logout.' });
+});
+
+// 4. Get Master Data (Protected)
+app.get('/api/admin/master-data', (req, res) => {
+  const authHeader = req.headers.authorization;
+  const user = verifyAdminToken(authHeader);
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Akses ditolak. Memerlukan autentikasi administrator sistem.' });
+  }
+
+  return res.json({
+    success: true,
+    masterData: masterDataState,
+    arenasList: getArenasList()
+  });
+});
+
+// 5. Update Master Tournament Info (Protected)
+app.post('/api/admin/tournament', (req, res) => {
+  const authHeader = req.headers.authorization;
+  const user = verifyAdminToken(authHeader);
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Akses ditolak. Sesi admin tidak valid.' });
+  }
+
+  const { tournament } = req.body || {};
+  if (!tournament || !tournament.namaEvent) {
+    return res.status(400).json({ success: false, error: 'Nama turnamen tidak boleh kosong.' });
+  }
+
+  masterDataState.tournament = {
+    ...masterDataState.tournament,
+    ...tournament,
+    updatedAt: new Date().toISOString()
+  };
+
+  // Synchronize tournament name and logos into all arenas immediately
+  syncTournamentToAllArenas();
+
+  addAuditLog(
+    user.username,
+    'UPDATE_TURNAMEN',
+    `Memperbarui data master turnamen: "${tournament.namaEvent}" (${tournament.tingkatKejuaraan || 'Nasional'})`
+  );
+
+  broadcastState();
+  saveLocalStorage(true);
+
+  return res.json({
+    success: true,
+    tournament: masterDataState.tournament,
+    message: 'Data master turnamen berhasil diperbarui dan disinkronkan ke seluruh gelanggang.'
+  });
+});
+
+// 6. Manage Master Referees (Protected)
+app.post('/api/admin/referees', (req, res) => {
+  const authHeader = req.headers.authorization;
+  const user = verifyAdminToken(authHeader);
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Akses ditolak. Sesi admin tidak valid.' });
+  }
+
+  const { action, referee, id } = req.body || {};
+
+  if (action === 'add') {
+    if (!referee || !referee.nama) {
+      return res.status(400).json({ success: false, error: 'Nama wasit/juri wajib diisi.' });
+    }
+    const newRef: any = {
+      id: referee.id || `ref_${Date.now()}`,
+      nama: referee.nama,
+      lisensi: referee.lisensi || 'Daerah',
+      pengprov: referee.pengprov || 'Pusat',
+      kategoriTugas: referee.kategoriTugas || 'Semua',
+      nomorRegistrasi: referee.nomorRegistrasi || `WJ-${Math.floor(1000 + Math.random() * 9000)}`,
+      telepon: referee.telepon || '-',
+      status: referee.status || 'aktif',
+      catatan: referee.catatan || ''
+    };
+    masterDataState.referees.push(newRef);
+    addAuditLog(user.username, 'TAMBAH_WASIT', `Menambahkan wasit/juri baru: ${newRef.nama} (${newRef.lisensi} - ${newRef.pengprov})`);
+  } else if (action === 'update') {
+    if (!referee || !referee.id) {
+      return res.status(400).json({ success: false, error: 'ID wasit wajib disertakan.' });
+    }
+    const idx = masterDataState.referees.findIndex(r => r.id === referee.id);
+    if (idx !== -1) {
+      masterDataState.referees[idx] = { ...masterDataState.referees[idx], ...referee };
+      addAuditLog(user.username, 'UPDATE_WASIT', `Memperbarui profil wasit: ${referee.nama}`);
+    } else {
+      return res.status(404).json({ success: false, error: 'Wasit tidak ditemukan.' });
+    }
+  } else if (action === 'delete') {
+    const targetId = id || referee?.id;
+    if (!targetId) {
+      return res.status(400).json({ success: false, error: 'ID wasit wajib disertakan.' });
+    }
+    const targetRef = masterDataState.referees.find(r => r.id === targetId);
+    masterDataState.referees = masterDataState.referees.filter(r => r.id !== targetId);
+    addAuditLog(user.username, 'HAPUS_WASIT', `Menghapus wasit: ${targetRef?.nama || targetId}`);
+  } else {
+    return res.status(400).json({ success: false, error: 'Aksi tidak dikenali.' });
+  }
+
+  broadcastState();
+  saveLocalStorage(true);
+
+  return res.json({
+    success: true,
+    referees: masterDataState.referees,
+    message: 'Data wasit & juri berhasil disimpan.'
+  });
+});
+
+// 7. Manage Arena Assignments (Protected)
+app.post('/api/admin/assignments', (req, res) => {
+  const authHeader = req.headers.authorization;
+  const user = verifyAdminToken(authHeader);
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Akses ditolak. Sesi admin tidak valid.' });
+  }
+
+  const { arenaId, assignment, allAssignments } = req.body || {};
+
+  if (allAssignments) {
+    masterDataState.assignments = { ...masterDataState.assignments, ...allAssignments };
+    addAuditLog(user.username, 'UPDATE_SEMUA_PENUGASAN', 'Memperbarui seluruh tabel penugasan wasit-juri gelanggang.');
+  } else if (arenaId && assignment) {
+    masterDataState.assignments[arenaId] = {
+      ...masterDataState.assignments[arenaId],
+      ...assignment,
+      arenaId
+    };
+    addAuditLog(user.username, 'UPDATE_PENUGASAN_GELANGGANG', `Memperbarui penugasan wasit-juri untuk ${assignment.namaGelanggang || arenaId}`);
+  } else {
+    return res.status(400).json({ success: false, error: 'Data penugasan tidak valid.' });
+  }
+
+  broadcastState();
+  saveLocalStorage(true);
+
+  return res.json({
+    success: true,
+    assignments: masterDataState.assignments,
+    message: 'Penugasan wasit & juri gelanggang berhasil disimpan.'
+  });
+});
+
+// 8. Change Admin Password (Protected)
+app.post('/api/admin/change-password', (req, res) => {
+  const authHeader = req.headers.authorization;
+  const user = verifyAdminToken(authHeader);
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Akses ditolak. Sesi admin tidak valid.' });
+  }
+
+  const { newPassword, confirmPassword } = req.body || {};
+  if (!newPassword || newPassword.length < 4) {
+    return res.status(400).json({ success: false, error: 'Password baru minimal 4 karakter.' });
+  }
+  if (newPassword !== confirmPassword) {
+    return res.status(400).json({ success: false, error: 'Konfirmasi password tidak cocok.' });
+  }
+
+  const targetAcc = adminCredentials.find(a => a.username === user.username);
+  if (targetAcc) {
+    targetAcc.passwordHash = newPassword;
+    addAuditLog(user.username, 'UBAH_PASSWORD', `Password akun administrator ${user.username} berhasil diubah.`);
+    saveLocalStorage(true);
+    return res.json({ success: true, message: 'Password administrator berhasil diubah.' });
+  }
+
+  return res.status(404).json({ success: false, error: 'Akun tidak ditemukan.' });
+});
+
+// 9. Reset Master Data to Official Defaults (Protected)
+app.post('/api/admin/reset-master-data', (req, res) => {
+  const authHeader = req.headers.authorization;
+  const user = verifyAdminToken(authHeader);
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Akses ditolak. Sesi admin tidak valid.' });
+  }
+
+  masterDataState.tournament = JSON.parse(JSON.stringify(defaultTournamentInfo));
+  masterDataState.referees = JSON.parse(JSON.stringify(defaultReferees));
+  masterDataState.assignments = JSON.parse(JSON.stringify(defaultAssignments));
+
+  syncTournamentToAllArenas();
+  addAuditLog(user.username, 'RESET_MASTER_DATA', 'Mereset data master turnamen, wasit, dan penugasan ke template resmi.');
+  broadcastState();
+  saveLocalStorage(true);
+
+  return res.json({
+    success: true,
+    masterData: masterDataState,
+    message: 'Data master berhasil direset ke standar resmi IPSI.'
+  });
+});
+
+// ==========================================
+// LOCAL SERVER STORAGE PERSISTENCE API
+// ==========================================
+
+// 1. Get Storage Status & Health
+app.get('/api/storage/status', (req, res) => {
+  try {
+    const status = getLocalStorageStatus();
+    res.json({ success: true, ...status });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 2. Force Immediate Save to Local Server Disk
+app.post('/api/storage/save', (req, res) => {
+  try {
+    saveLocalStorage(true);
+    const status = getLocalStorageStatus();
+    res.json({
+      success: true,
+      message: 'Semua data turnamen, wasit, dan pertandingan seluruh gelanggang berhasil disimpan ke disk server lokal.',
+      status
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 3. Create Local Server Backup Snapshot
+app.post('/api/storage/backup', (req, res) => {
+  try {
+    const backupResult = createLocalBackup();
+    const status = getLocalStorageStatus();
+    res.json({
+      success: true,
+      message: `File cadangan lokal berhasil dibuat: ${backupResult.filename}`,
+      backup: backupResult,
+      status
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 4. Download Full Database JSON Dump directly
+app.get('/api/storage/export', (req, res) => {
+  try {
+    saveLocalStorage(true);
+    const dump = exportFullDatabase();
+    const filename = `silat_db_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(JSON.stringify(dump, null, 2));
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5. Restore Database from JSON Dump
+app.post('/api/storage/import', (req, res) => {
+  try {
+    const { dump } = req.body || {};
+    if (!dump) {
+      return res.status(400).json({ success: false, error: 'Data backup JSON tidak ditemukan.' });
+    }
+    const result = importFullDatabase(dump);
+    broadcastState();
+    const status = getLocalStorageStatus();
+    res.json({
+      success: true,
+      message: result.message,
+      status
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 app.post('/api/action', (req, res) => {
@@ -446,13 +763,7 @@ app.post('/api/action', (req, res) => {
       }
 
       case 'DISTRIBUTE_EXCEL_ALL_ARENAS': {
-        const {
-          tandingCategories = [],
-          seniPesertaList = [],
-          targetArenaIds,
-          arenaDistributions,
-          reorderStrategy = 'standar_ipsi_babak'
-        } = payload;
+        const { tandingCategories = [], seniPesertaList = [], targetArenaIds } = payload;
 
         // Find all active arenas
         let activeArenas = (targetArenaIds && targetArenaIds.length > 0)
@@ -474,175 +785,45 @@ app.post('/api/action', (req, res) => {
           seniArenas = activeArenas;
         }
 
-        const getRoundProgressionRank = (round: string): number => {
-          switch ((round || '').toLowerCase()) {
-            case 'sixtyfourth':
-            case 'thirtysecond':
-              return 1;
-            case 'sixteenth':
-            case 'eighth':
-              return 2;
-            case 'quarter':
-              return 3;
-            case 'semi':
-              return 4;
-            case 'final':
-              return 5;
-            default:
-              return 3;
-          }
-        };
-
         // 1. Distribute Tanding Categories across active tanding arenas
-        if (arenaDistributions) {
-          // Direct per-arena distribution provided by the UI
-          Object.entries(arenaDistributions).forEach(([aId, dist]: [string, any]) => {
-            const arena = getArena(aId);
-            if (!arena) return;
-
-            if (dist.tandingCategories && Array.isArray(dist.tandingCategories)) {
-              arena.state.baganCategories = JSON.parse(JSON.stringify(dist.tandingCategories));
-              arena.state.baganCategories.forEach(cat => {
-                cat.gelanggang = arena.info.nama;
-                cat.arenaId = arena.info.id;
-                cat.matches.forEach((m: any) => {
-                  m.gelanggang = arena.info.nama;
-                  m.arenaId = arena.info.id;
-                });
-              });
-            }
-          });
-        } else if (tandingCategories.length > 0 && tandingArenas.length > 0) {
+        if (tandingCategories.length > 0 && tandingArenas.length > 0) {
           tandingArenas.forEach(a => {
             a.state.baganCategories = [];
           });
 
-          // Round-robin distribution of entire category brackets so participants never leave their gelanggang
           tandingCategories.forEach((cat: any, idx: number) => {
             const targetArena = tandingArenas[idx % tandingArenas.length];
-            const clonedCat = JSON.parse(JSON.stringify(cat));
-            clonedCat.gelanggang = targetArena.info.nama;
-            clonedCat.arenaId = targetArena.info.id;
-            clonedCat.matches.forEach((m: any) => {
-              m.gelanggang = targetArena.info.nama;
-              m.arenaId = targetArena.info.id;
-            });
-            targetArena.state.baganCategories.push(clonedCat);
+            targetArena.state.baganCategories.push(JSON.parse(JSON.stringify(cat)));
           });
-        }
 
-        // Sequence matches and assign sequential partais per arena
-        const arenasToSequence = arenaDistributions
-          ? Object.keys(arenaDistributions).map(id => getArena(id)).filter(Boolean)
-          : tandingArenas;
-
-        arenasToSequence.forEach(arena => {
-          if (!arena.state.baganCategories || arena.state.baganCategories.length === 0) return;
-
-          if (reorderStrategy === 'standar_ipsi_babak') {
-            // Flatten all matches with metadata to sort by IPSI progression rank
-            const flattenedMatches: { catId: string; catName: string; match: any; roundRank: number }[] = [];
-            arena.state.baganCategories.forEach(cat => {
-              cat.matches.forEach((m: any) => {
-                flattenedMatches.push({
-                  catId: cat.id,
-                  catName: cat.name || '',
-                  match: m,
-                  roundRank: getRoundProgressionRank(m.round)
-                });
-              });
-            });
-
-            // Sort: Preliminary rounds first -> Quarter Finals -> Semi Finals -> Finals
-            flattenedMatches.sort((a, b) => {
-              if (a.roundRank !== b.roundRank) return a.roundRank - b.roundRank;
-              if (a.catName !== b.catName) return a.catName.localeCompare(b.catName);
-              return (a.match.id || 0) - (b.match.id || 0);
-            });
-
-            // Renumber sequentially
-            flattenedMatches.forEach((item, idx) => {
-              const num = idx + 1;
-              const partaiStr = `Partai ${num < 10 ? '0' + num : num}`;
-              item.match.partai = partaiStr;
-              item.match.gelanggang = arena.info.nama;
-              item.match.arenaId = arena.info.id;
-            });
-          } else {
-            // Per category sequential
+          // Renumber partais sequentially per arena
+          tandingArenas.forEach(arena => {
             let partaiNum = 1;
             arena.state.baganCategories.forEach(cat => {
-              cat.gelanggang = arena.info.nama;
-              cat.arenaId = arena.info.id;
               cat.matches.forEach((m: any) => {
                 m.partai = `Partai ${partaiNum < 10 ? '0' + partaiNum : partaiNum}`;
-                m.gelanggang = arena.info.nama;
-                m.arenaId = arena.info.id;
                 partaiNum++;
               });
             });
-          }
 
-          // Find the match with Partai 01 (or first match) to initialize the active match
-          let firstCat = arena.state.baganCategories[0];
-          let firstMatch = firstCat?.matches[0];
-          for (const cat of arena.state.baganCategories) {
-            for (const m of cat.matches) {
-              if (m.partai === 'Partai 01' || m.partai === 'Partai 1') {
-                firstCat = cat;
-                firstMatch = m;
-                break;
-              }
-            }
-            if (firstMatch?.partai === 'Partai 01' || firstMatch?.partai === 'Partai 1') break;
-          }
-
-          if (firstMatch && firstCat) {
-            arena.state.activeBaganCategoryId = firstCat.id;
-            arena.state.activeBaganMatchId = firstMatch.id;
-            arena.state.partai = firstMatch.partai;
-            arena.state.kelas = firstCat.kelas || arena.state.kelas;
-            arena.state.gender = firstCat.gender || arena.state.gender;
-            if (firstMatch.atletMerah) arena.state.atletMerah = { ...firstMatch.atletMerah };
-            if (firstMatch.atletBiru) arena.state.atletBiru = { ...firstMatch.atletBiru };
-            arena.state.scores = {
-              merah: { babak1: 0, babak2: 0, babak3: 0, total: 0 },
-              biru: { babak1: 0, babak2: 0, babak3: 0, total: 0 }
-            };
-            arena.state.winner = null;
-            arena.state.matchStatus = 'idle';
-            arena.state.timerActive = false;
-            arena.state.timerSeconds = arena.state.selectedWaktu || 120;
-            arena.state.juriHits = [];
-            arena.info.modeAktif = 'tanding';
-          }
-        });
-
-        // 2. Distribute Seni Participants across active seni arenas
-        if (arenaDistributions) {
-          Object.entries(arenaDistributions).forEach(([aId, dist]: [string, any]) => {
-            const arena = getArena(aId);
-            if (!arena) return;
-            if (dist.seniPesertaList && Array.isArray(dist.seniPesertaList)) {
-              arena.tgrState.pesertaList = [];
-              dist.seniPesertaList.forEach((p: any, idx: number) => {
-                const newOrder = idx + 1;
-                const newP = {
-                  ...p,
-                  noUrut: newOrder,
-                  partaiNumber: newOrder,
-                  partai: `PARTAI ${newOrder < 10 ? '0' + newOrder : newOrder}`
-                };
-                arena.tgrState.pesertaList.push(newP);
-              });
-              if (arena.tgrState.pesertaList.length > 0) {
-                arena.tgrState.activePesertaId = arena.tgrState.pesertaList[0].id;
-                arena.tgrState.partai = arena.tgrState.pesertaList[0].partai;
-                arena.info.modeAktif = 'seni';
-              }
+            // Set initial active match for this arena
+            const firstCat = arena.state.baganCategories[0];
+            const firstMatch = firstCat?.matches[0];
+            if (firstMatch) {
+              arena.state.activeBaganCategoryId = firstCat.id;
+              arena.state.activeBaganMatchId = firstMatch.id;
+              arena.state.partai = firstMatch.partai;
+              arena.state.kelas = firstCat.kelas || arena.state.kelas;
+              arena.state.gender = firstCat.gender || arena.state.gender;
+              if (firstMatch.atletMerah) arena.state.atletMerah = { ...firstMatch.atletMerah };
+              if (firstMatch.atletBiru) arena.state.atletBiru = { ...firstMatch.atletBiru };
+              arena.info.modeAktif = 'tanding';
             }
           });
-        } else if (seniPesertaList.length > 0 && seniArenas.length > 0) {
+        }
+
+        // 2. Distribute Seni Participants across active seni arenas
+        if (seniPesertaList.length > 0 && seniArenas.length > 0) {
           seniArenas.forEach(a => {
             a.tgrState.pesertaList = [];
             a.tgrState.activePesertaId = null;
@@ -1546,6 +1727,15 @@ app.post('/api/action', (req, res) => {
         break;
     }
 
+    // Persist all state changes to local server storage
+    const isCriticalAction = [
+      'START_MATCH', 'RESET_OR_NEXT_PARTAI', 'SET_BABAK', 'ADD_GELANGGANG', 'DELETE_GELANGGANG',
+      'RESET_GELANGGANG', 'DEWAN_PENALTY', 'TGR_CONFIRM_PESERTA_SCORE', 'TGR_CANCEL_SCORE',
+      'TGR_ADD_PESERTA', 'TGR_DELETE_PESERTA', 'UPDATE_BAGAN_CATEGORIES', 'TRANSFER_CATEGORY_TO_ARENA',
+      'LOAD_BAGAN_MATCH', 'SEKRETARIS_ADJUST_PARTAI', 'RESET_MATCH', 'TGR_RESET_SESSION'
+    ].includes(type);
+
+    saveLocalStorage(isCriticalAction);
     broadcastState();
     res.json({
       success: true,

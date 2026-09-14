@@ -29,16 +29,11 @@ import {
   Activity,
   Maximize2,
   Calendar,
-  Swords,
-  Upload,
-  FileSpreadsheet,
-  Sparkles
+  Swords
 } from 'lucide-react';
 import { GelanggangInfo, ArenaSummary, MatchState, TGRState, MatchHistory } from '../types';
 import { playBeep } from '../utils/sound';
 import GelanggangJadwalSection from './GelanggangJadwalSection';
-import UploadDistribusiPesertaModal from './UploadDistribusiPesertaModal';
-import GoogleSheetsIntegrationModal from './GoogleSheetsIntegrationModal';
 
 interface GelanggangManagerTabProps {
   arenasList: GelanggangInfo[];
@@ -65,9 +60,6 @@ export default function GelanggangManagerTab({
   const [viewMode, setViewMode] = useState<'grid' | 'matrix'>('grid');
   
   // Modal states
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [isGoogleSheetsModalOpen, setIsGoogleSheetsModalOpen] = useState(false);
-  const [successBanner, setSuccessBanner] = useState<string | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingArena, setEditingArena] = useState<GelanggangInfo | null>(null);
@@ -273,30 +265,6 @@ export default function GelanggangManagerTab({
             </div>
           )}
 
-          {/* Upload Data Peserta & Auto Distribute Button */}
-          <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={() => { playBeep('click'); setIsUploadModalOpen(true); }}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white text-xs font-black tracking-wider uppercase shadow-lg shadow-blue-600/30 cursor-pointer"
-            title="Upload data peserta Excel/CSV dan bagi ke gelanggang & jadwal otomatis"
-          >
-            <Upload className="w-4 h-4" />
-            <span className="hidden sm:inline">UPLOAD & BAGI PESERTA</span>
-          </motion.button>
-
-          {/* Google Sheets Integration Button */}
-          <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            onClick={() => { playBeep('click'); setIsGoogleSheetsModalOpen(true); }}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-600 hover:from-emerald-600 hover:to-teal-600 text-white text-xs font-black tracking-wider uppercase shadow-lg shadow-emerald-700/30 cursor-pointer"
-            title="Hubungkan data peserta dan hasil pertandingan ke Google Sheets"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-300" />
-            <span className="hidden sm:inline">GOOGLE SHEETS</span>
-          </motion.button>
-
           {/* Add New Arena Button */}
           <motion.button
             whileHover={{ scale: 1.03 }}
@@ -309,31 +277,6 @@ export default function GelanggangManagerTab({
           </motion.button>
         </div>
       </div>
-
-      {/* Success Notification Banner */}
-      {successBanner && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-7xl mb-4 p-4 rounded-2xl bg-gradient-to-r from-emerald-950/80 via-teal-950/80 to-blue-950/80 border border-emerald-500/40 text-emerald-200 text-xs flex items-start justify-between shadow-xl"
-        >
-          <div className="flex items-start gap-3">
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <strong className="text-sm font-bold text-white block">Distribusi Peserta Berhasil</strong>
-              <p className="whitespace-pre-line text-emerald-300 font-mono text-[11px] leading-relaxed">
-                {successBanner}
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setSuccessBanner(null)}
-            className="p-1 rounded-lg text-emerald-400 hover:text-white hover:bg-emerald-800/40 cursor-pointer"
-          >
-            ✕
-          </button>
-        </motion.div>
-      )}
 
       {/* 2. MAIN CONTENT AREA */}
       {mainTab === 'jadwal' ? (
@@ -1052,26 +995,6 @@ export default function GelanggangManagerTab({
           </div>
         )}
       </AnimatePresence>
-
-      {/* Upload & Distribusi Peserta Modal */}
-      <UploadDistribusiPesertaModal
-        isOpen={isUploadModalOpen}
-        onClose={() => setIsUploadModalOpen(false)}
-        arenasList={arenasList}
-        dispatch={dispatch}
-        theme={theme}
-        onSuccess={(msg) => setSuccessBanner(msg)}
-      />
-
-      {/* Google Sheets Real-Time Synchronization Modal */}
-      <GoogleSheetsIntegrationModal
-        isOpen={isGoogleSheetsModalOpen}
-        onClose={() => setIsGoogleSheetsModalOpen(false)}
-        allArenasMap={allArenasMap}
-        onApplyParsedAthletes={(athletes) => {
-          setSuccessBanner(`Berhasil mengambil ${athletes.length} atlet dari Google Sheets! Klik "UPLOAD & BAGI PESERTA" untuk membagi ke gelanggang.`);
-        }}
-      />
     </div>
   );
 }

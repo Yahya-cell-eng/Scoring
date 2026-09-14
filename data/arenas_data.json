@@ -1,0 +1,1268 @@
+{
+  "arena_1": {
+    "info": {
+      "id": "arena_1",
+      "nama": "Gelanggang 1",
+      "kode": "1",
+      "keterangan": "Matras 1 - Arena Utama A",
+      "modeAktif": "tanding",
+      "status": "aktif",
+      "createdAt": "2026-09-14T22:18:30.292Z"
+    },
+    "state": {
+      "namaEvent": "Kejuaraan Pencak Silat Nasional",
+      "gelanggang": "Gelanggang 1",
+      "partai": "01",
+      "kelas": "A",
+      "gender": "Putra",
+      "atletMerah": {
+        "nama": "Atlet Merah",
+        "kontingen": "SUDUT MERAH"
+      },
+      "atletBiru": {
+        "nama": "Atlet Biru",
+        "kontingen": "SUDUT BIRU"
+      },
+      "selectedWaktu": 120,
+      "timerActive": false,
+      "timerSeconds": 120,
+      "currentBabak": 1,
+      "matchStatus": "idle",
+      "logoKanan": null,
+      "logoKiri": null,
+      "logoTengah": null,
+      "juriHits": [],
+      "scores": {
+        "merah": {
+          "babak1": 0,
+          "babak2": 0,
+          "babak3": 0,
+          "total": 0
+        },
+        "biru": {
+          "babak1": 0,
+          "babak2": 0,
+          "babak3": 0,
+          "total": 0
+        }
+      },
+      "dewanPenalties": {
+        "merah": {
+          "binaan1": false,
+          "binaan2": false,
+          "teguran1": false,
+          "teguran2": false,
+          "peringatan1": false,
+          "peringatan2": false,
+          "disqualified": false
+        },
+        "biru": {
+          "binaan1": false,
+          "binaan2": false,
+          "teguran1": false,
+          "teguran2": false,
+          "peringatan1": false,
+          "peringatan2": false,
+          "disqualified": false
+        }
+      },
+      "directPoints": {
+        "merah": 0,
+        "biru": 0
+      },
+      "verification": {
+        "active": false,
+        "type": null,
+        "votes": {
+          "juri1": null,
+          "juri2": null,
+          "juri3": null
+        },
+        "result": null
+      },
+      "lastValidScore": null,
+      "winner": null,
+      "juryPenaltyAccess": false,
+      "baganCategories": [
+        {
+          "id": "cat_1",
+          "name": "Kelas A Putra (45 - 50 kg)",
+          "gender": "Putra",
+          "size": 4,
+          "matches": [
+            {
+              "id": 1,
+              "round": "semi",
+              "partai": "Partai 01",
+              "atletMerah": {
+                "nama": "Fajar Ramadhan",
+                "kontingen": "Banten"
+              },
+              "atletBiru": {
+                "nama": "Galang Perkasa",
+                "kontingen": "Sumatra Barat"
+              },
+              "winner": null
+            },
+            {
+              "id": 2,
+              "round": "semi",
+              "partai": "Partai 02",
+              "atletMerah": {
+                "nama": "Andi Wijaya",
+                "kontingen": "DKI Jakarta"
+              },
+              "atletBiru": {
+                "nama": "Rian Hidayat",
+                "kontingen": "Jawa Barat"
+              },
+              "winner": null
+            },
+            {
+              "id": 3,
+              "round": "final",
+              "partai": "Partai 05",
+              "atletMerah": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "atletBiru": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "winner": null
+            }
+          ]
+        },
+        {
+          "id": "cat_2",
+          "name": "Kelas B Putra (50 - 55 kg)",
+          "gender": "Putra",
+          "size": 8,
+          "matches": [
+            {
+              "id": 1,
+              "round": "quarter",
+              "partai": "Partai 03",
+              "atletMerah": {
+                "nama": "Budi Santoso",
+                "kontingen": "Jawa Timur"
+              },
+              "atletBiru": {
+                "nama": "Made Wirawan",
+                "kontingen": "Bali"
+              },
+              "winner": null
+            },
+            {
+              "id": 2,
+              "round": "quarter",
+              "partai": "Partai 04",
+              "atletMerah": {
+                "nama": "Hendra Wijaya",
+                "kontingen": "Jawa Tengah"
+              },
+              "atletBiru": {
+                "nama": "Zulfikar",
+                "kontingen": "DI Yogyakarta"
+              },
+              "winner": null
+            },
+            {
+              "id": 3,
+              "round": "quarter",
+              "partai": "Partai 06",
+              "atletMerah": {
+                "nama": "Ahmad Fauzi",
+                "kontingen": "Sumatra Utara"
+              },
+              "atletBiru": {
+                "nama": "Eko Prasetyo",
+                "kontingen": "Lampung"
+              },
+              "winner": null
+            },
+            {
+              "id": 4,
+              "round": "quarter",
+              "partai": "Partai 07",
+              "atletMerah": {
+                "nama": "Rizal Gibran",
+                "kontingen": "Kaltim"
+              },
+              "atletBiru": {
+                "nama": "Dimas Anggara",
+                "kontingen": "Sulsel"
+              },
+              "winner": null
+            },
+            {
+              "id": 5,
+              "round": "semi",
+              "partai": "Partai 08",
+              "atletMerah": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "atletBiru": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "winner": null
+            },
+            {
+              "id": 6,
+              "round": "semi",
+              "partai": "Partai 09",
+              "atletMerah": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "atletBiru": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "winner": null
+            },
+            {
+              "id": 7,
+              "round": "final",
+              "partai": "Partai 10",
+              "atletMerah": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "atletBiru": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "winner": null
+            }
+          ]
+        }
+      ],
+      "activeBaganCategoryId": null,
+      "activeBaganMatchId": null,
+      "juriRawScores": {
+        "juri1": {
+          "merah": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          },
+          "biru": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          }
+        },
+        "juri2": {
+          "merah": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          },
+          "biru": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          }
+        },
+        "juri3": {
+          "merah": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          },
+          "biru": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          }
+        }
+      }
+    },
+    "tgrState": {
+      "namaEvent": "Kejuaraan TGR Pencak Silat IPSI",
+      "gelanggang": "Gelanggang 1",
+      "partai": "PARTAI 1",
+      "babak": "PENYISIHAN",
+      "sistemSeni": "pool",
+      "activePesertaId": "peserta_1",
+      "pesertaList": [
+        {
+          "id": "peserta_1",
+          "noUrut": 1,
+          "nama": "Aditya Wahyu",
+          "kontingen": "DKI Jakarta",
+          "kategori": "Tunggal",
+          "status": "Sudah Menilai",
+          "scores": {
+            "juri1": 9.91,
+            "juri2": 9.93,
+            "juri3": 9.92,
+            "juri4": 9.94,
+            "juri5": 9.915
+          },
+          "kebenaranScores": {
+            "juri1": 9.5,
+            "juri2": 9.48,
+            "juri3": 9.51,
+            "juri4": 9.49,
+            "juri5": 9.52
+          },
+          "isLocked": true,
+          "decisions": [
+            "Sah"
+          ],
+          "deductions": 0.01,
+          "finalScore": 9.91,
+          "ranking": 1,
+          "dewanDecisionScore": 0,
+          "rankingInPool": 1
+        },
+        {
+          "id": "peserta_2",
+          "noUrut": 2,
+          "nama": "Rian & Hendra (Duo)",
+          "kontingen": "Jawa Barat",
+          "kategori": "Ganda",
+          "status": "Sudah Menilai",
+          "scores": {
+            "juri1": 9.88,
+            "juri2": 9.89,
+            "juri3": 9.875,
+            "juri4": 9.91,
+            "juri5": 9.885
+          },
+          "kebenaranScores": {
+            "juri1": 9.4,
+            "juri2": 9.41,
+            "juri3": 9.38,
+            "juri4": 9.45,
+            "juri5": 9.42
+          },
+          "isLocked": true,
+          "decisions": [
+            "Sah"
+          ],
+          "deductions": 0,
+          "finalScore": 9.885,
+          "ranking": 2,
+          "dewanDecisionScore": 0,
+          "rankingInPool": 2
+        },
+        {
+          "id": "peserta_3",
+          "noUrut": 3,
+          "nama": "Fajar, Galang & Andi",
+          "kontingen": "Jawa Timur",
+          "kategori": "Regu",
+          "status": "Belum Menilai",
+          "scores": {},
+          "kebenaranScores": {},
+          "isLocked": false,
+          "decisions": [],
+          "deductions": 0,
+          "dewanDecisionScore": 0
+        },
+        {
+          "id": "peserta_4",
+          "noUrut": 4,
+          "nama": "Putri Lestari",
+          "kontingen": "Jawa Tengah",
+          "kategori": "Tunggal",
+          "status": "Belum Menilai",
+          "scores": {},
+          "kebenaranScores": {},
+          "isLocked": false,
+          "decisions": [],
+          "deductions": 0,
+          "dewanDecisionScore": 0
+        }
+      ],
+      "jumlahJuri": 5,
+      "sessionStatus": "open",
+      "timerActive": false,
+      "timerSeconds": 0,
+      "selectedWaktu": 0,
+      "auditLogs": [
+        {
+          "id": "log_1",
+          "timestamp": "2026-09-14T22:18:30.292Z",
+          "user": "Sistem",
+          "action": "Inisialisasi sistem TGR di Gelanggang 1 Berhasil"
+        }
+      ],
+      "juriCorrections": {},
+      "logoKanan": null,
+      "logoKiri": null,
+      "logoTengah": null
+    },
+    "histories": [
+      {
+        "id": "hist_arena_1_01",
+        "namaEvent": "Kejuaraan Pencak Silat Nasional",
+        "partai": "Partai 01",
+        "kelas": "Kelas A",
+        "gender": "Putra",
+        "atletMerah": {
+          "nama": "Fajar Ramadhan",
+          "kontingen": "Banten"
+        },
+        "atletBiru": {
+          "nama": "Galang Perkasa",
+          "kontingen": "Sumatra Barat"
+        },
+        "winner": "merah",
+        "skorAkhirMerah": 28,
+        "skorAkhirBiru": 19,
+        "tanggal": "2026-09-14T20:18:30.292Z"
+      }
+    ]
+  },
+  "arena_2": {
+    "info": {
+      "id": "arena_2",
+      "nama": "Gelanggang 2",
+      "kode": "2",
+      "keterangan": "Matras 2 - Arena B",
+      "modeAktif": "tanding",
+      "status": "aktif",
+      "createdAt": "2026-09-14T22:18:30.293Z"
+    },
+    "state": {
+      "namaEvent": "Kejuaraan Pencak Silat Nasional",
+      "gelanggang": "Gelanggang 2",
+      "partai": "01",
+      "kelas": "A",
+      "gender": "Putra",
+      "atletMerah": {
+        "nama": "Atlet Merah",
+        "kontingen": "SUDUT MERAH"
+      },
+      "atletBiru": {
+        "nama": "Atlet Biru",
+        "kontingen": "SUDUT BIRU"
+      },
+      "selectedWaktu": 120,
+      "timerActive": false,
+      "timerSeconds": 120,
+      "currentBabak": 1,
+      "matchStatus": "idle",
+      "logoKanan": null,
+      "logoKiri": null,
+      "logoTengah": null,
+      "juriHits": [],
+      "scores": {
+        "merah": {
+          "babak1": 0,
+          "babak2": 0,
+          "babak3": 0,
+          "total": 0
+        },
+        "biru": {
+          "babak1": 0,
+          "babak2": 0,
+          "babak3": 0,
+          "total": 0
+        }
+      },
+      "dewanPenalties": {
+        "merah": {
+          "binaan1": false,
+          "binaan2": false,
+          "teguran1": false,
+          "teguran2": false,
+          "peringatan1": false,
+          "peringatan2": false,
+          "disqualified": false
+        },
+        "biru": {
+          "binaan1": false,
+          "binaan2": false,
+          "teguran1": false,
+          "teguran2": false,
+          "peringatan1": false,
+          "peringatan2": false,
+          "disqualified": false
+        }
+      },
+      "directPoints": {
+        "merah": 0,
+        "biru": 0
+      },
+      "verification": {
+        "active": false,
+        "type": null,
+        "votes": {
+          "juri1": null,
+          "juri2": null,
+          "juri3": null
+        },
+        "result": null
+      },
+      "lastValidScore": null,
+      "winner": null,
+      "juryPenaltyAccess": false,
+      "baganCategories": [
+        {
+          "id": "cat_1",
+          "name": "Kelas A Putra (45 - 50 kg)",
+          "gender": "Putra",
+          "size": 4,
+          "matches": [
+            {
+              "id": 1,
+              "round": "semi",
+              "partai": "Partai 01",
+              "atletMerah": {
+                "nama": "Fajar Ramadhan",
+                "kontingen": "Banten"
+              },
+              "atletBiru": {
+                "nama": "Galang Perkasa",
+                "kontingen": "Sumatra Barat"
+              },
+              "winner": null
+            },
+            {
+              "id": 2,
+              "round": "semi",
+              "partai": "Partai 02",
+              "atletMerah": {
+                "nama": "Andi Wijaya",
+                "kontingen": "DKI Jakarta"
+              },
+              "atletBiru": {
+                "nama": "Rian Hidayat",
+                "kontingen": "Jawa Barat"
+              },
+              "winner": null
+            },
+            {
+              "id": 3,
+              "round": "final",
+              "partai": "Partai 05",
+              "atletMerah": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "atletBiru": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "winner": null
+            }
+          ]
+        },
+        {
+          "id": "cat_2",
+          "name": "Kelas B Putra (50 - 55 kg)",
+          "gender": "Putra",
+          "size": 8,
+          "matches": [
+            {
+              "id": 1,
+              "round": "quarter",
+              "partai": "Partai 03",
+              "atletMerah": {
+                "nama": "Budi Santoso",
+                "kontingen": "Jawa Timur"
+              },
+              "atletBiru": {
+                "nama": "Made Wirawan",
+                "kontingen": "Bali"
+              },
+              "winner": null
+            },
+            {
+              "id": 2,
+              "round": "quarter",
+              "partai": "Partai 04",
+              "atletMerah": {
+                "nama": "Hendra Wijaya",
+                "kontingen": "Jawa Tengah"
+              },
+              "atletBiru": {
+                "nama": "Zulfikar",
+                "kontingen": "DI Yogyakarta"
+              },
+              "winner": null
+            },
+            {
+              "id": 3,
+              "round": "quarter",
+              "partai": "Partai 06",
+              "atletMerah": {
+                "nama": "Ahmad Fauzi",
+                "kontingen": "Sumatra Utara"
+              },
+              "atletBiru": {
+                "nama": "Eko Prasetyo",
+                "kontingen": "Lampung"
+              },
+              "winner": null
+            },
+            {
+              "id": 4,
+              "round": "quarter",
+              "partai": "Partai 07",
+              "atletMerah": {
+                "nama": "Rizal Gibran",
+                "kontingen": "Kaltim"
+              },
+              "atletBiru": {
+                "nama": "Dimas Anggara",
+                "kontingen": "Sulsel"
+              },
+              "winner": null
+            },
+            {
+              "id": 5,
+              "round": "semi",
+              "partai": "Partai 08",
+              "atletMerah": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "atletBiru": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "winner": null
+            },
+            {
+              "id": 6,
+              "round": "semi",
+              "partai": "Partai 09",
+              "atletMerah": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "atletBiru": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "winner": null
+            },
+            {
+              "id": 7,
+              "round": "final",
+              "partai": "Partai 10",
+              "atletMerah": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "atletBiru": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "winner": null
+            }
+          ]
+        }
+      ],
+      "activeBaganCategoryId": null,
+      "activeBaganMatchId": null,
+      "juriRawScores": {
+        "juri1": {
+          "merah": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          },
+          "biru": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          }
+        },
+        "juri2": {
+          "merah": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          },
+          "biru": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          }
+        },
+        "juri3": {
+          "merah": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          },
+          "biru": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          }
+        }
+      }
+    },
+    "tgrState": {
+      "namaEvent": "Kejuaraan TGR Pencak Silat IPSI",
+      "gelanggang": "Gelanggang 2",
+      "partai": "PARTAI 1",
+      "babak": "PENYISIHAN",
+      "sistemSeni": "pool",
+      "activePesertaId": "peserta_1",
+      "pesertaList": [
+        {
+          "id": "peserta_1",
+          "noUrut": 1,
+          "nama": "Aditya Wahyu",
+          "kontingen": "DKI Jakarta",
+          "kategori": "Tunggal",
+          "status": "Sudah Menilai",
+          "scores": {
+            "juri1": 9.91,
+            "juri2": 9.93,
+            "juri3": 9.92,
+            "juri4": 9.94,
+            "juri5": 9.915
+          },
+          "kebenaranScores": {
+            "juri1": 9.5,
+            "juri2": 9.48,
+            "juri3": 9.51,
+            "juri4": 9.49,
+            "juri5": 9.52
+          },
+          "isLocked": true,
+          "decisions": [
+            "Sah"
+          ],
+          "deductions": 0.01,
+          "finalScore": 9.91,
+          "ranking": 1,
+          "dewanDecisionScore": 0,
+          "rankingInPool": 1
+        },
+        {
+          "id": "peserta_2",
+          "noUrut": 2,
+          "nama": "Rian & Hendra (Duo)",
+          "kontingen": "Jawa Barat",
+          "kategori": "Ganda",
+          "status": "Sudah Menilai",
+          "scores": {
+            "juri1": 9.88,
+            "juri2": 9.89,
+            "juri3": 9.875,
+            "juri4": 9.91,
+            "juri5": 9.885
+          },
+          "kebenaranScores": {
+            "juri1": 9.4,
+            "juri2": 9.41,
+            "juri3": 9.38,
+            "juri4": 9.45,
+            "juri5": 9.42
+          },
+          "isLocked": true,
+          "decisions": [
+            "Sah"
+          ],
+          "deductions": 0,
+          "finalScore": 9.885,
+          "ranking": 2,
+          "dewanDecisionScore": 0,
+          "rankingInPool": 2
+        },
+        {
+          "id": "peserta_3",
+          "noUrut": 3,
+          "nama": "Fajar, Galang & Andi",
+          "kontingen": "Jawa Timur",
+          "kategori": "Regu",
+          "status": "Belum Menilai",
+          "scores": {},
+          "kebenaranScores": {},
+          "isLocked": false,
+          "decisions": [],
+          "deductions": 0,
+          "dewanDecisionScore": 0
+        },
+        {
+          "id": "peserta_4",
+          "noUrut": 4,
+          "nama": "Putri Lestari",
+          "kontingen": "Jawa Tengah",
+          "kategori": "Tunggal",
+          "status": "Belum Menilai",
+          "scores": {},
+          "kebenaranScores": {},
+          "isLocked": false,
+          "decisions": [],
+          "deductions": 0,
+          "dewanDecisionScore": 0
+        }
+      ],
+      "jumlahJuri": 5,
+      "sessionStatus": "open",
+      "timerActive": false,
+      "timerSeconds": 0,
+      "selectedWaktu": 0,
+      "auditLogs": [
+        {
+          "id": "log_1",
+          "timestamp": "2026-09-14T22:18:30.293Z",
+          "user": "Sistem",
+          "action": "Inisialisasi sistem TGR di Gelanggang 2 Berhasil"
+        }
+      ],
+      "juriCorrections": {},
+      "logoKanan": null,
+      "logoKiri": null,
+      "logoTengah": null
+    },
+    "histories": [
+      {
+        "id": "hist_arena_2_01",
+        "namaEvent": "Kejuaraan Pencak Silat Nasional",
+        "partai": "Partai 01",
+        "kelas": "Kelas A",
+        "gender": "Putra",
+        "atletMerah": {
+          "nama": "Fajar Ramadhan",
+          "kontingen": "Banten"
+        },
+        "atletBiru": {
+          "nama": "Galang Perkasa",
+          "kontingen": "Sumatra Barat"
+        },
+        "winner": "merah",
+        "skorAkhirMerah": 28,
+        "skorAkhirBiru": 19,
+        "tanggal": "2026-09-14T20:18:30.293Z"
+      }
+    ]
+  },
+  "arena_3": {
+    "info": {
+      "id": "arena_3",
+      "nama": "Gelanggang 3",
+      "kode": "3",
+      "keterangan": "Matras 3 - Arena Seni C",
+      "modeAktif": "seni",
+      "status": "aktif",
+      "createdAt": "2026-09-14T22:18:30.293Z"
+    },
+    "state": {
+      "namaEvent": "Kejuaraan Pencak Silat Nasional",
+      "gelanggang": "Gelanggang 3",
+      "partai": "01",
+      "kelas": "A",
+      "gender": "Putra",
+      "atletMerah": {
+        "nama": "Atlet Merah",
+        "kontingen": "SUDUT MERAH"
+      },
+      "atletBiru": {
+        "nama": "Atlet Biru",
+        "kontingen": "SUDUT BIRU"
+      },
+      "selectedWaktu": 120,
+      "timerActive": false,
+      "timerSeconds": 120,
+      "currentBabak": 1,
+      "matchStatus": "idle",
+      "logoKanan": null,
+      "logoKiri": null,
+      "logoTengah": null,
+      "juriHits": [],
+      "scores": {
+        "merah": {
+          "babak1": 0,
+          "babak2": 0,
+          "babak3": 0,
+          "total": 0
+        },
+        "biru": {
+          "babak1": 0,
+          "babak2": 0,
+          "babak3": 0,
+          "total": 0
+        }
+      },
+      "dewanPenalties": {
+        "merah": {
+          "binaan1": false,
+          "binaan2": false,
+          "teguran1": false,
+          "teguran2": false,
+          "peringatan1": false,
+          "peringatan2": false,
+          "disqualified": false
+        },
+        "biru": {
+          "binaan1": false,
+          "binaan2": false,
+          "teguran1": false,
+          "teguran2": false,
+          "peringatan1": false,
+          "peringatan2": false,
+          "disqualified": false
+        }
+      },
+      "directPoints": {
+        "merah": 0,
+        "biru": 0
+      },
+      "verification": {
+        "active": false,
+        "type": null,
+        "votes": {
+          "juri1": null,
+          "juri2": null,
+          "juri3": null
+        },
+        "result": null
+      },
+      "lastValidScore": null,
+      "winner": null,
+      "juryPenaltyAccess": false,
+      "baganCategories": [
+        {
+          "id": "cat_1",
+          "name": "Kelas A Putra (45 - 50 kg)",
+          "gender": "Putra",
+          "size": 4,
+          "matches": [
+            {
+              "id": 1,
+              "round": "semi",
+              "partai": "Partai 01",
+              "atletMerah": {
+                "nama": "Fajar Ramadhan",
+                "kontingen": "Banten"
+              },
+              "atletBiru": {
+                "nama": "Galang Perkasa",
+                "kontingen": "Sumatra Barat"
+              },
+              "winner": null
+            },
+            {
+              "id": 2,
+              "round": "semi",
+              "partai": "Partai 02",
+              "atletMerah": {
+                "nama": "Andi Wijaya",
+                "kontingen": "DKI Jakarta"
+              },
+              "atletBiru": {
+                "nama": "Rian Hidayat",
+                "kontingen": "Jawa Barat"
+              },
+              "winner": null
+            },
+            {
+              "id": 3,
+              "round": "final",
+              "partai": "Partai 05",
+              "atletMerah": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "atletBiru": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "winner": null
+            }
+          ]
+        },
+        {
+          "id": "cat_2",
+          "name": "Kelas B Putra (50 - 55 kg)",
+          "gender": "Putra",
+          "size": 8,
+          "matches": [
+            {
+              "id": 1,
+              "round": "quarter",
+              "partai": "Partai 03",
+              "atletMerah": {
+                "nama": "Budi Santoso",
+                "kontingen": "Jawa Timur"
+              },
+              "atletBiru": {
+                "nama": "Made Wirawan",
+                "kontingen": "Bali"
+              },
+              "winner": null
+            },
+            {
+              "id": 2,
+              "round": "quarter",
+              "partai": "Partai 04",
+              "atletMerah": {
+                "nama": "Hendra Wijaya",
+                "kontingen": "Jawa Tengah"
+              },
+              "atletBiru": {
+                "nama": "Zulfikar",
+                "kontingen": "DI Yogyakarta"
+              },
+              "winner": null
+            },
+            {
+              "id": 3,
+              "round": "quarter",
+              "partai": "Partai 06",
+              "atletMerah": {
+                "nama": "Ahmad Fauzi",
+                "kontingen": "Sumatra Utara"
+              },
+              "atletBiru": {
+                "nama": "Eko Prasetyo",
+                "kontingen": "Lampung"
+              },
+              "winner": null
+            },
+            {
+              "id": 4,
+              "round": "quarter",
+              "partai": "Partai 07",
+              "atletMerah": {
+                "nama": "Rizal Gibran",
+                "kontingen": "Kaltim"
+              },
+              "atletBiru": {
+                "nama": "Dimas Anggara",
+                "kontingen": "Sulsel"
+              },
+              "winner": null
+            },
+            {
+              "id": 5,
+              "round": "semi",
+              "partai": "Partai 08",
+              "atletMerah": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "atletBiru": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "winner": null
+            },
+            {
+              "id": 6,
+              "round": "semi",
+              "partai": "Partai 09",
+              "atletMerah": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "atletBiru": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "winner": null
+            },
+            {
+              "id": 7,
+              "round": "final",
+              "partai": "Partai 10",
+              "atletMerah": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "atletBiru": {
+                "nama": "",
+                "kontingen": ""
+              },
+              "winner": null
+            }
+          ]
+        }
+      ],
+      "activeBaganCategoryId": null,
+      "activeBaganMatchId": null,
+      "juriRawScores": {
+        "juri1": {
+          "merah": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          },
+          "biru": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          }
+        },
+        "juri2": {
+          "merah": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          },
+          "biru": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          }
+        },
+        "juri3": {
+          "merah": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          },
+          "biru": {
+            "1": 0,
+            "2": 0,
+            "3": 0
+          }
+        }
+      }
+    },
+    "tgrState": {
+      "namaEvent": "Kejuaraan TGR Pencak Silat IPSI",
+      "gelanggang": "Gelanggang 3",
+      "partai": "PARTAI 1",
+      "babak": "PENYISIHAN",
+      "sistemSeni": "pool",
+      "activePesertaId": "peserta_1",
+      "pesertaList": [
+        {
+          "id": "peserta_1",
+          "noUrut": 1,
+          "nama": "Aditya Wahyu",
+          "kontingen": "DKI Jakarta",
+          "kategori": "Tunggal",
+          "status": "Sudah Menilai",
+          "scores": {
+            "juri1": 9.91,
+            "juri2": 9.93,
+            "juri3": 9.92,
+            "juri4": 9.94,
+            "juri5": 9.915
+          },
+          "kebenaranScores": {
+            "juri1": 9.5,
+            "juri2": 9.48,
+            "juri3": 9.51,
+            "juri4": 9.49,
+            "juri5": 9.52
+          },
+          "isLocked": true,
+          "decisions": [
+            "Sah"
+          ],
+          "deductions": 0.01,
+          "finalScore": 9.91,
+          "ranking": 1,
+          "dewanDecisionScore": 0,
+          "rankingInPool": 1
+        },
+        {
+          "id": "peserta_2",
+          "noUrut": 2,
+          "nama": "Rian & Hendra (Duo)",
+          "kontingen": "Jawa Barat",
+          "kategori": "Ganda",
+          "status": "Sudah Menilai",
+          "scores": {
+            "juri1": 9.88,
+            "juri2": 9.89,
+            "juri3": 9.875,
+            "juri4": 9.91,
+            "juri5": 9.885
+          },
+          "kebenaranScores": {
+            "juri1": 9.4,
+            "juri2": 9.41,
+            "juri3": 9.38,
+            "juri4": 9.45,
+            "juri5": 9.42
+          },
+          "isLocked": true,
+          "decisions": [
+            "Sah"
+          ],
+          "deductions": 0,
+          "finalScore": 9.885,
+          "ranking": 2,
+          "dewanDecisionScore": 0,
+          "rankingInPool": 2
+        },
+        {
+          "id": "peserta_3",
+          "noUrut": 3,
+          "nama": "Fajar, Galang & Andi",
+          "kontingen": "Jawa Timur",
+          "kategori": "Regu",
+          "status": "Belum Menilai",
+          "scores": {},
+          "kebenaranScores": {},
+          "isLocked": false,
+          "decisions": [],
+          "deductions": 0,
+          "dewanDecisionScore": 0
+        },
+        {
+          "id": "peserta_4",
+          "noUrut": 4,
+          "nama": "Putri Lestari",
+          "kontingen": "Jawa Tengah",
+          "kategori": "Tunggal",
+          "status": "Belum Menilai",
+          "scores": {},
+          "kebenaranScores": {},
+          "isLocked": false,
+          "decisions": [],
+          "deductions": 0,
+          "dewanDecisionScore": 0
+        }
+      ],
+      "jumlahJuri": 5,
+      "sessionStatus": "open",
+      "timerActive": false,
+      "timerSeconds": 0,
+      "selectedWaktu": 0,
+      "auditLogs": [
+        {
+          "id": "log_1",
+          "timestamp": "2026-09-14T22:18:30.293Z",
+          "user": "Sistem",
+          "action": "Inisialisasi sistem TGR di Gelanggang 3 Berhasil"
+        }
+      ],
+      "juriCorrections": {},
+      "logoKanan": null,
+      "logoKiri": null,
+      "logoTengah": null
+    },
+    "histories": [
+      {
+        "id": "hist_arena_3_01",
+        "namaEvent": "Kejuaraan Pencak Silat Nasional",
+        "partai": "Partai 01",
+        "kelas": "Kelas A",
+        "gender": "Putra",
+        "atletMerah": {
+          "nama": "Fajar Ramadhan",
+          "kontingen": "Banten"
+        },
+        "atletBiru": {
+          "nama": "Galang Perkasa",
+          "kontingen": "Sumatra Barat"
+        },
+        "winner": "merah",
+        "skorAkhirMerah": 28,
+        "skorAkhirBiru": 19,
+        "tanggal": "2026-09-14T20:18:30.293Z"
+      }
+    ]
+  }
+}

@@ -9,7 +9,6 @@ import {
   Radio,
   Download,
   FileDown,
-  FileSpreadsheet,
   Shield,
   Award,
   Users,
@@ -20,20 +19,20 @@ import {
   LayoutGrid,
   BarChart3,
   CheckCircle2,
-  ChevronDown
+  ChevronDown,
+  HardDrive
 } from 'lucide-react';
 import { playBeep } from '../utils/sound';
 import tandingImg from '../assets/images/tanding_shield_logo_1783848117532.jpg';
 import seniImg from '../assets/images/seni_shield_logo_1783848135838.jpg';
 import RekapitulasiSkor from './RekapitulasiSkor';
 import GelanggangManagerTab from './GelanggangManagerTab';
-import GoogleSheetsIntegrationModal from './GoogleSheetsIntegrationModal';
 import { MatchHistory, TGRState, MatchState, GelanggangInfo, ArenaSummary } from '../types';
 import ThemePaletteSelector from './ThemePaletteSelector';
 import { generateSchedulePdf, ScheduleMetadata, ScheduleMatchRow } from '../utils/generateSchedulePdf';
 
 interface PanelPortalProps {
-  onSelectMode: (mode: 'tanding' | 'seni' | 'monitor_urutan', targetRole?: string) => void;
+  onSelectMode: (mode: 'tanding' | 'seni' | 'monitor_urutan' | 'admin', targetRole?: string) => void;
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
   histories?: MatchHistory[];
@@ -63,7 +62,6 @@ export default function PanelPortal({
 }: PanelPortalProps) {
   // Main Navigation Tabs on Home Portal: 'portal' | 'gelanggang' | 'rekapitulasi'
   const [activeTab, setActiveTab] = useState<'portal' | 'gelanggang' | 'rekapitulasi'>('portal');
-  const [showGoogleSheetsModal, setShowGoogleSheetsModal] = useState<boolean>(false);
 
   const currentArena = arenasList.find(a => a.id === currentArenaId) || arenasList[0] || {
     id: 'arena_1',
@@ -251,45 +249,41 @@ export default function PanelPortal({
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => handleSelect('monitor_urutan')}
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-amber-500/50 bg-gradient-to-r from-amber-950/70 to-orange-950/70 hover:from-amber-900/80 hover:to-orange-900/80 text-[10px] font-mono tracking-wider font-extrabold uppercase text-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.3)] transition-all cursor-pointer"
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-cyan-500/50 bg-gradient-to-r from-blue-950/70 to-cyan-950/70 hover:from-blue-900/80 hover:to-cyan-900/80 text-[10px] font-mono tracking-wider font-extrabold uppercase text-cyan-300 shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all cursor-pointer"
           >
-            <Radio className="w-3.5 h-3.5 text-red-500 animate-pulse" />
+            <Radio className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
             <span>MONITOR URUTAN</span>
           </motion.button>
 
-          {/* Dedicated Quick Access to Manajemen Gelanggang */}
+          {/* Dedicated Admin Panel Launch Button */}
           <motion.button
+            id="portal-admin-panel-btn"
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={() => {
-              playBeep('click');
-              setActiveTab('gelanggang');
+              playBeep('valid');
+              onSelectMode('admin');
             }}
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-blue-500/50 bg-gradient-to-r from-blue-950/80 to-indigo-950/80 hover:from-blue-900/90 hover:to-indigo-900/90 text-[10px] font-mono tracking-wider font-extrabold uppercase text-blue-300 shadow-[0_0_20px_rgba(59,130,246,0.3)] transition-all cursor-pointer"
-            title="Kelola & Distribusikan Data Peserta ke Gelanggang"
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-amber-500/60 bg-gradient-to-r from-amber-950/90 via-slate-900 to-amber-950/90 hover:from-amber-900 hover:to-slate-800 text-[10px] font-mono tracking-wider font-extrabold uppercase text-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.35)] transition-all cursor-pointer"
+            title="AdminPanel - Kelola Data Master Turnamen, Wasit & Juri, dan Penugasan Gelanggang"
           >
-            <Layers className="w-3.5 h-3.5 text-blue-400" />
-            <span className="hidden sm:inline">MANAJEMEN GELANGGANG</span>
+            <Shield className="w-3.5 h-3.5 text-amber-400" />
+            <span>ADMIN PANEL</span>
           </motion.button>
 
-          {/* Dedicated Google Sheets Sync Button */}
-          <motion.button
+          {/* Local Server Storage Indicator Pill */}
+          <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => {
-              playBeep('click');
-              setShowGoogleSheetsModal(true);
-            }}
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-emerald-500/50 bg-gradient-to-r from-emerald-950/80 to-teal-950/80 hover:from-emerald-900/90 hover:to-teal-900/90 text-[10px] font-mono tracking-wider font-extrabold uppercase text-emerald-300 shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all cursor-pointer"
-            title="Sinkronkan Peserta & Hasil Pertandingan ke Google Sheets"
+            className="hidden xl:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-emerald-500/40 bg-[#041a12]/80 text-[10px] font-mono tracking-wider font-extrabold uppercase text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.2)] select-none"
+            title="Sistem Berbasis Server Lokal: Data turnamen, wasit, dan arena tersimpan permanen di disk lokal (./data)"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-            <span>GOOGLE SHEETS</span>
-          </motion.button>
+            <HardDrive className="w-3 h-3 text-emerald-400" />
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>SERVER LOKAL TERSIMPAN</span>
+          </motion.div>
         </div>
       </div>
 
@@ -514,16 +508,6 @@ export default function PanelPortal({
         </div>
         <span>SISTEM SKORING DIGITAL PENCAK SILAT MULTI GELANGGANG</span>
       </div>
-
-      {/* Google Sheets Real-Time Synchronization Modal */}
-      <GoogleSheetsIntegrationModal
-        isOpen={showGoogleSheetsModal}
-        onClose={() => setShowGoogleSheetsModal(false)}
-        allArenasMap={allArenasMap}
-        onApplyParsedAthletes={(athletes) => {
-          setActiveTab('gelanggang');
-        }}
-      />
 
     </div>
   );

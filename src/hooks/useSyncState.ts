@@ -4,19 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { MatchState, MatchHistory, TGRState, GelanggangInfo, ArenaSummary } from '../types';
-import {
-  getActiveSpreadsheetId,
-  getAutoSyncEnabled,
-  getStoredGoogleToken,
-  syncAllMatchResultsToSheets
-} from '../services/googleSheetsService';
-import {
-  isSupabaseConfigured,
-  subscribeToSupabaseRealtime,
-  syncArenaStateToSupabase,
-  getSupabaseAutoSyncEnabled
-} from '../services/supabaseService';
+import { MatchState, MatchHistory, TGRState, GelanggangInfo, ArenaSummary, MasterDataState } from '../types';
 
 export function useSyncState() {
   // Initialize current arena from URL param or localStorage or default 'arena_1'
@@ -42,6 +30,7 @@ export function useSyncState() {
   ]);
   const [allArenasSummary, setAllArenasSummary] = useState<ArenaSummary[]>([]);
   const [allArenasMap, setAllArenasMap] = useState<Record<string, { state: MatchState; tgrState: TGRState; histories: MatchHistory[]; info: GelanggangInfo }>>({});
+  const [masterData, setMasterData] = useState<MasterDataState | null>(null);
   const [connected, setConnected] = useState(false);
 
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -76,6 +65,7 @@ export function useSyncState() {
           if (data.arenasList) setArenasList(data.arenasList);
           if (data.allArenasSummary) setAllArenasSummary(data.allArenasSummary);
           if (data.arenas) setAllArenasMap(data.arenas);
+          if (data.masterData) setMasterData(data.masterData);
         })
         .catch(err => console.warn('Failed to switch arena data:', err));
     }
@@ -92,6 +82,7 @@ export function useSyncState() {
             if (event.data.arenasList) setArenasList(event.data.arenasList);
             if (event.data.allArenasSummary) setAllArenasSummary(event.data.allArenasSummary);
             if (event.data.arenas) setAllArenasMap(event.data.arenas);
+            if (event.data.masterData) setMasterData(event.data.masterData);
 
             // If the broadcast is for our current arena or all arenas, update current active view
             const activeId = currentArenaIdRef.current;
@@ -134,6 +125,7 @@ export function useSyncState() {
           if (data.type === 'STATE_UPDATE') {
             if (data.arenasList) setArenasList(data.arenasList);
             if (data.allArenasSummary) setAllArenasSummary(data.allArenasSummary);
+            if (data.masterData) setMasterData(data.masterData);
             if (data.arenas) {
               setAllArenasMap(data.arenas);
             }
@@ -159,7 +151,8 @@ export function useSyncState() {
                 histories: data.histories,
                 arenasList: data.arenasList,
                 allArenasSummary: data.allArenasSummary,
-                arenas: data.arenas
+                arenas: data.arenas,
+                masterData: data.masterData
               });
             }
           }
@@ -172,34 +165,11 @@ export function useSyncState() {
         if (!isSubscribed) return;
         setConnected(false);
         ev.close();
-        // Retry connection after delay
-        setTimeout(connect, 4000);
+        setTimeout(connect, 3000);
       };
     };
 
     connect();
-
-    // Setup Supabase Realtime subscription if configured
-    let unsubSupabase: (() => void) | null = null;
-    if (isSupabaseConfigured()) {
-      unsubSupabase = subscribeToSupabaseRealtime((arenaId, payload) => {
-        if (!isSubscribed) return;
-        setConnected(true);
-        if (arenaId === currentArenaIdRef.current) {
-          if (payload.state) setState(payload.state);
-          if (payload.tgrState) setTgrState(payload.tgrState);
-        }
-        setAllArenasMap(prev => ({
-          ...prev,
-          [arenaId]: {
-            state: payload.state || prev[arenaId]?.state,
-            tgrState: payload.tgrState || prev[arenaId]?.tgrState,
-            histories: prev[arenaId]?.histories || [],
-            info: payload.info || prev[arenaId]?.info
-          }
-        }));
-      });
-    }
 
     return () => {
       isSubscribed = false;
@@ -208,9 +178,6 @@ export function useSyncState() {
       }
       if (broadcastRef.current) {
         broadcastRef.current.close();
-      }
-      if (unsubSupabase) {
-        unsubSupabase();
       }
     };
   }, [currentArenaId]);
@@ -227,24 +194,18 @@ export function useSyncState() {
         }
       };
 
-      let data: any = null;
-      try {
-        const res = await fetch('/api/action', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(bodyPayload)
-        });
-        if (res.ok) {
-          data = await res.json();
-        }
-      } catch (networkErr) {
-        console.warn('Backend /api/action unreachable, running in client/Supabase mode:', networkErr);
+      const res = await fetch('/api/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bodyPayload)
+      });
+      if (!res.ok) {
+        throw new Error(`Server returned HTTP ${res.status}`);
       }
-
-      if (data && data.success) {
+      const data = await res.json();
+      if (data.success) {
         if (data.arenasList) setArenasList(data.arenasList);
         if (data.allArenasSummary) setAllArenasSummary(data.allArenasSummary);
-        if (data.arenas) setAllArenasMap(data.arenas);
 
         if (targetArenaId === currentArenaIdRef.current) {
           if (data.state) setState(data.state);
@@ -260,45 +221,14 @@ export function useSyncState() {
             tgrState: data.tgrState,
             histories: data.histories || histories,
             arenasList: data.arenasList,
-            allArenasSummary: data.allArenasSummary,
-            arenas: data.arenas
+            allArenasSummary: data.allArenasSummary
           });
-        }
-
-        // Live Auto-Sync to Supabase when enabled
-        if (getSupabaseAutoSyncEnabled() && isSupabaseConfigured() && data.arenas && data.arenas[targetArenaId]) {
-          syncArenaStateToSupabase(targetArenaId, data.arenas[targetArenaId]).catch(e => {
-            console.warn('Background Supabase sync error:', e);
-          });
-        }
-
-        // Live Auto-Sync to Google Sheets when match ends or scores are finalized
-        const matchEndTypes = [
-          'SELESAIKAN_PERTANDINGAN',
-          'SAVE_MATCH_HISTORY',
-          'SET_WINNER',
-          'ADVANCE_WINNER',
-          'TGR_SIMPAN_NILAI'
-        ];
-        if (matchEndTypes.includes(type)) {
-          try {
-            const autoSync = getAutoSyncEnabled();
-            const token = getStoredGoogleToken();
-            const spreadsheetId = getActiveSpreadsheetId();
-            if (autoSync && token && spreadsheetId && data.arenas) {
-              syncAllMatchResultsToSheets(token, spreadsheetId, data.arenas).catch(err => {
-                console.warn('Background auto-sync to Google Sheets:', err);
-              });
-            }
-          } catch {
-            // Ignore non-blocking background error
-          }
         }
       }
-      return data || { success: true, localOnly: true };
+      return data;
     } catch (e) {
       console.error(`Failed to dispatch action ${type}:`, e);
-      return { success: false, error: e };
+      throw e;
     }
   }, [histories]);
 
@@ -312,6 +242,8 @@ export function useSyncState() {
     selectArena,
     arenasList,
     allArenasSummary,
-    allArenasMap
+    allArenasMap,
+    masterData,
+    setMasterData
   };
 }

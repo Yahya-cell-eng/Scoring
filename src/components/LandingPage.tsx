@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Shield, Users, FileText, Monitor as MonitorIcon, ChevronRight, ChevronLeft, ChevronDown, Maximize, Minimize, Sun, Moon, RefreshCw, Radio, ArrowRight, ArrowDown, Sparkles, LayoutList, Columns, FileDown, FileSpreadsheet } from 'lucide-react';
+import { Shield, Users, FileText, Monitor as MonitorIcon, ChevronRight, ChevronLeft, ChevronDown, Maximize, Minimize, Sun, Moon, RefreshCw, Radio, ArrowRight, ArrowDown, Sparkles, LayoutList, Columns, FileDown } from 'lucide-react';
 import { playBeep } from '../utils/sound';
 import { generateSchedulePdf, ScheduleMetadata, ScheduleMatchRow } from '../utils/generateSchedulePdf';
 
@@ -14,7 +14,6 @@ import sekretarisImg from '../assets/images/sekretaris_panel_1782782300726.jpg';
 import juriImg from '../assets/images/juri_panel_1782782315779.jpg';
 import monitorImg from '../assets/images/monitor_panel_1782782330918.jpg';
 import RekapitulasiSkor from './RekapitulasiSkor';
-import GoogleSheetsIntegrationModal from './GoogleSheetsIntegrationModal';
 import { MatchHistory, MatchState, GelanggangInfo, ArenaSummary, TGRState } from '../types';
 import ThemePaletteSelector from './ThemePaletteSelector';
 
@@ -48,7 +47,6 @@ export default function LandingPage({
   const [selectedJuriGroup, setSelectedJuriGroup] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [scrollMode, setScrollMode] = useState<'vertical' | 'horizontal'>('vertical');
-  const [showGoogleSheetsModal, setShowGoogleSheetsModal] = useState(false);
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
@@ -375,18 +373,6 @@ export default function LandingPage({
         >
           <FileDown className="w-3.5 h-3.5 text-emerald-400" />
           <span>📄 UNDUH JADWAL (PDF)</span>
-        </button>
-
-        <button
-          onClick={() => {
-            playBeep('click');
-            setShowGoogleSheetsModal(true);
-          }}
-          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 cursor-pointer bg-gradient-to-r from-emerald-950/90 to-teal-950/90 hover:from-emerald-900 hover:to-teal-900 border border-emerald-500/50 text-emerald-300 text-[9.5px] uppercase tracking-wider font-mono font-black rounded-xl transition-all active:scale-95 shadow-[0_0_15px_rgba(16,185,129,0.25)]"
-          title="Hubungkan Data Peserta & Hasil Pertandingan ke Google Sheets"
-        >
-          <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-          <span>📊 GOOGLE SHEETS</span>
         </button>
 
         <button
@@ -823,13 +809,6 @@ export default function LandingPage({
           subtitle="DAFTAR PEMENANG & SKOR AKHIR PARTAI FISIK TANDING SELESAI"
         />
       </div>
-
-      {/* Google Sheets Real-Time Synchronization Modal */}
-      <GoogleSheetsIntegrationModal
-        isOpen={showGoogleSheetsModal}
-        onClose={() => setShowGoogleSheetsModal(false)}
-        allArenasMap={allArenasMap}
-      />
 
     </div>
   );
