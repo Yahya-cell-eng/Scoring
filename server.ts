@@ -889,6 +889,41 @@ app.post('/api/action', (req, res) => {
         }
         break;
       }
+      case 'UPDATE_TGR_PESERTA_LIST': {
+        if (payload.pesertaList && Array.isArray(payload.pesertaList)) {
+          tgrState.pesertaList = payload.pesertaList.map((p: any, idx: number) => ({
+            id: p.id || Math.random().toString(36).substring(2),
+            noUrut: p.noUrut || (idx + 1),
+            noUndian: p.noUndian !== undefined ? p.noUndian : (idx + 1),
+            partai: p.partai || `PARTAI ${p.partaiNumber || idx + 1}`,
+            partaiNumber: p.partaiNumber !== undefined ? p.partaiNumber : (idx + 1),
+            pool: p.pool || `Pool A`,
+            gender: p.gender || 'Putra',
+            usia: p.usia || 'Dewasa',
+            nama: p.nama,
+            kontingen: p.kontingen,
+            kategori: p.kategori || "Tunggal",
+            status: p.status || "Belum Menilai",
+            scores: p.scores || {},
+            kebenaranScores: p.kebenaranScores || {},
+            isLocked: p.isLocked || false,
+            decisions: p.decisions || [],
+            deductions: p.deductions || 0,
+            deductionReasons: p.deductionReasons || [],
+            dewanDecisionScore: p.dewanDecisionScore || 0,
+            finalizedJuries: p.finalizedJuries || []
+          }));
+          tgrState.activePesertaId = tgrState.pesertaList[0]?.id || null;
+          if (tgrState.activePesertaId) {
+            const activeP = tgrState.pesertaList.find(p => p.id === tgrState.activePesertaId);
+            if (activeP) {
+              tgrState.partai = activeP.partai || `PARTAI ${activeP.partaiNumber || activeP.noUrut}`;
+            }
+          }
+        }
+        recalculateArenaTGRScores(arena);
+        break;
+      }
       case 'UPDATE_ATHLETES': {
         state.atletMerah = { ...state.atletMerah, ...payload.atletMerah };
         state.atletBiru = { ...state.atletBiru, ...payload.atletBiru };

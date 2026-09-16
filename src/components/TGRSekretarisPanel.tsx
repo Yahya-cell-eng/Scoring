@@ -6,6 +6,7 @@ import { jsPDF } from 'jspdf';
 import { QRCodeSVG } from 'qrcode.react';
 import TGRRegistrasiDataPanel from './TGRRegistrasiDataPanel';
 import SekretarisSeniMultiPesertaPanel from './SekretarisSeniMultiPesertaPanel';
+import UploadJadwalModal from './UploadJadwalModal';
 import { 
   ArrowLeft, UserPlus, Trash2, Edit3, Check, Star, Settings, 
   Timer, Play, Pause, RotateCcw, Award, CheckSquare, RefreshCw, LogIn, ChevronRight, FileSpreadsheet,
@@ -76,8 +77,53 @@ export default function TGRSekretarisPanel({ state, dispatch, onBack, theme, onT
   const [showAddModal, setShowAddModal] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
   const [showLogoEventModal, setShowLogoEventModal] = useState(false);
+  const [showUploadJadwalModal, setShowUploadJadwalModal] = useState(false);
+  const [uploadScheduleToast, setUploadScheduleToast] = useState<string | null>(null);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
   const [editingPeserta, setEditingPeserta] = useState<TGRPeserta | null>(null);
+
+  const handleApplyUploadedSchedule = async (params: {
+    tandingCategories: any[];
+    seniPesertaList: TGRPeserta[];
+    targetArena: 'current' | 'all';
+    mode: 'tanding' | 'seni' | 'all';
+    rawSummary: any;
+  }) => {
+    const { tandingCategories, seniPesertaList, targetArena, mode, rawSummary } = params;
+
+    if (targetArena === 'all') {
+      await dispatch('DISTRIBUTE_EXCEL_ALL_ARENAS', {
+        tandingCategories: (mode === 'tanding' || mode === 'all') ? tandingCategories : [],
+        seniPesertaList: (mode === 'seni' || mode === 'all') ? seniPesertaList : []
+      });
+    } else {
+      if ((mode === 'seni' || mode === 'all') && seniPesertaList.length > 0) {
+        await dispatch('UPDATE_TGR_PESERTA_LIST', { pesertaList: seniPesertaList });
+        await dispatch('TGR_UPDATE_PESERTA', { action: 'sync_list', pesertaList: seniPesertaList });
+        try {
+          localStorage.setItem('tgr_peserta_list', JSON.stringify(seniPesertaList));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      if ((mode === 'tanding' || mode === 'all') && tandingCategories.length > 0) {
+        await dispatch('UPDATE_BAGAN_CATEGORIES', { categories: tandingCategories });
+        try {
+          localStorage.setItem('silat_bagan_categories', JSON.stringify(tandingCategories));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+
+    await dispatch('TGR_ADD_AUDIT_LOG', {
+      user: 'Sekretaris Seni',
+      action: `Mengunggah & menerapkan jadwal resmi (${rawSummary.totalRows} partai)`
+    });
+
+    setUploadScheduleToast(`Berhasil mengimpor & menerapkan ${rawSummary.totalRows} data jadwal ke arena!`);
+    setTimeout(() => setUploadScheduleToast(null), 5000);
+  };
 
   // Preset Logos (Standard high-res vector emblems)
   const PRESET_LOGOS = {
@@ -795,6 +841,21 @@ export default function TGRSekretarisPanel({ state, dispatch, onBack, theme, onT
             )}
           </button>
 
+          <button
+            onClick={() => { playBeep('click'); setShowUploadJadwalModal(true); }}
+            className={`px-3 py-1.5 text-xs cursor-pointer rounded-lg transition-all font-extrabold uppercase flex items-center gap-1.5 border shadow-sm hover:scale-105 active:scale-95 duration-200 ${
+              theme === 'dark' 
+                ? 'bg-blue-950/50 hover:bg-blue-900/70 border-blue-700/80 text-blue-300' 
+                : 'bg-blue-50 hover:bg-blue-100 border-blue-300 text-blue-800'
+            }`}
+            title="Upload Jadwal Pertandingan Seni / Tanding (.xlsx / .csv)"
+            id="btn-upload-jadwal-tgr-topbar"
+          >
+            <Upload className="w-4 h-4 text-blue-400 shrink-0" />
+            <span className="hidden sm:inline">Upload Jadwal</span>
+            <span className="sm:hidden">Upload</span>
+          </button>
+
           <div className={`h-5 w-[1px] ${theme === 'dark' ? 'bg-slate-850' : 'bg-slate-250'} mx-1`} />
           <div className="flex items-center gap-1.5">
             <FileText className="w-4 h-4 text-amber-500" />
@@ -1302,6 +1363,37 @@ export default function TGRSekretarisPanel({ state, dispatch, onBack, theme, onT
                       </div>
                     </div>
                   </div>
+                </div>
+
+                {/* Card Upload Jadwal Pertandingan */}
+                <div className={`p-4 rounded-2xl border ${
+                  theme === 'dark' ? 'bg-slate-900/60 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+                }`}>
+                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5 mb-3">
+                    <div className="flex items-center gap-2">
+                      <FileSpreadsheet className="w-4 h-4 text-blue-400" />
+                      <h3 className="text-[11px] font-black font-sport tracking-widest text-blue-400 uppercase">
+                        UPLOAD JADWAL PERTANDINGAN
+                      </h3>
+                    </div>
+                    <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded bg-blue-950/60 text-blue-300 border border-blue-800/50">
+                      Excel / CSV / Teks
+                    </span>
+                  </div>
+
+                  <p className="text-[10px] text-slate-400 mb-3 leading-relaxed">
+                    Unggah berkas jadwal pertandingan resmi. Sistem mendukung partai tanding maupun peserta seni (Tunggal, Ganda, Regu, Solo Kreatif).
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => { playBeep('click'); setShowUploadJadwalModal(true); }}
+                    className="w-full py-2.5 px-3 rounded-xl font-black text-xs uppercase flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-950/40 cursor-pointer transition-all duration-200"
+                    id="btn-open-upload-modal-control-tab"
+                  >
+                    <Upload className="w-4 h-4 text-white" />
+                    <span>Buka Menu Upload Jadwal</span>
+                  </button>
                 </div>
               </div>
 
@@ -2547,6 +2639,23 @@ export default function TGRSekretarisPanel({ state, dispatch, onBack, theme, onT
               </div>
             </motion.div>
           </motion.div>
+        )}
+
+        {/* Modal Upload Jadwal Pertandingan */}
+        <UploadJadwalModal
+          isOpen={showUploadJadwalModal}
+          onClose={() => setShowUploadJadwalModal(false)}
+          onApplySchedule={handleApplyUploadedSchedule}
+          currentArenaName={state.gelanggang ? `Gelanggang ${state.gelanggang}` : 'Gelanggang 1'}
+          defaultMode="seni"
+        />
+
+        {/* Floating Upload Success Toast */}
+        {uploadScheduleToast && (
+          <div className="fixed bottom-6 right-6 z-[999999] bg-emerald-600 border border-emerald-400 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 animate-bounce">
+            <CheckCircle className="w-5 h-5 text-white" />
+            <span className="text-xs font-bold font-mono">{uploadScheduleToast}</span>
+          </div>
         )}
 
       </AnimatePresence>

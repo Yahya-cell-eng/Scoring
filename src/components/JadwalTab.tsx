@@ -10,6 +10,7 @@ import { jsPDF } from 'jspdf';
 import { generateSchedulePdf, exportScheduleToExcel, printScheduleElement, ScheduleMatchRow, ScheduleMetadata } from '../utils/generateSchedulePdf';
 import AturUrutanPartaiModal from './AturUrutanPartaiModal';
 import EditJadwalPartaiModal from './EditJadwalPartaiModal';
+import UploadJadwalModal from './UploadJadwalModal';
 import { resequenceAndRenumberCategories, reorderSingleMatch, formatPartaiLabel } from '../utils/partaiOrdering';
 
 interface JadwalTabProps {
@@ -93,6 +94,8 @@ export default function JadwalTab({ theme, state, tgrState, dispatch }: JadwalTa
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [showAturUrutanModal, setShowAturUrutanModal] = useState(false);
   const [showEditJadwalModal, setShowEditJadwalModal] = useState(false);
+  const [showUploadJadwalModal, setShowUploadJadwalModal] = useState(false);
+  const [uploadToastMsg, setUploadToastMsg] = useState<string | null>(null);
   const [editingTargetMatchId, setEditingTargetMatchId] = useState<string | null>(null);
 
   const handleSaveCategories = (updatedCategories: BaganCategory[]) => {
@@ -102,6 +105,39 @@ export default function JadwalTab({ theme, state, tgrState, dispatch }: JadwalTa
     } catch (e) {
       console.error(e);
     }
+  };
+
+  const handleApplyUploadedSchedule = (params: {
+    tandingCategories: BaganCategory[];
+    seniPesertaList: TGRPeserta[];
+    targetArena: 'current' | 'all';
+    mode: 'tanding' | 'seni' | 'all';
+    rawSummary: any;
+  }) => {
+    const { tandingCategories, seniPesertaList, targetArena, mode, rawSummary } = params;
+
+    if (targetArena === 'all') {
+      dispatch('DISTRIBUTE_EXCEL_ALL_ARENAS', {
+        tandingCategories: (mode === 'tanding' || mode === 'all') ? tandingCategories : [],
+        seniPesertaList: (mode === 'seni' || mode === 'all') ? seniPesertaList : []
+      });
+    } else {
+      if ((mode === 'tanding' || mode === 'all') && tandingCategories.length > 0) {
+        handleSaveCategories(tandingCategories);
+      }
+      if ((mode === 'seni' || mode === 'all') && seniPesertaList.length > 0) {
+        dispatch('UPDATE_TGR_PESERTA_LIST', { pesertaList: seniPesertaList });
+        dispatch('TGR_UPDATE_PESERTA', { action: 'sync_list', pesertaList: seniPesertaList });
+        try {
+          localStorage.setItem('tgr_peserta_list', JSON.stringify(seniPesertaList));
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+
+    setUploadToastMsg(`Berhasil mengunggah & menerapkan ${rawSummary.totalRows} partai jadwal!`);
+    setTimeout(() => setUploadToastMsg(null), 5000);
   };
 
   const handleSaveUrutanPartai = (updatedCategories: BaganCategory[]) => {
@@ -1056,8 +1092,18 @@ export default function JadwalTab({ theme, state, tgrState, dispatch }: JadwalTa
           </div>
         </div>
 
-        {/* Action Buttons: Print, PDF, and Excel */}
+        {/* Action Buttons: Print, PDF, Excel, and Upload */}
         <div className="space-y-2 pt-2 border-t border-slate-800">
+          {/* Upload Jadwal Button */}
+          <button
+            onClick={() => { playBeep('click'); setShowUploadJadwalModal(true); }}
+            className="w-full py-2.5 px-3 rounded-lg font-black text-xs uppercase flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-md shadow-blue-950/40 transition-all cursor-pointer"
+            id="btn-upload-jadwal-sidebar"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>Upload Jadwal (Excel / CSV)</span>
+          </button>
+
           <div className="grid grid-cols-2 gap-2">
             {/* Direct Print Button */}
             <button
@@ -1120,6 +1166,15 @@ export default function JadwalTab({ theme, state, tgrState, dispatch }: JadwalTa
             <Eye className="w-3.5 h-3.5 text-indigo-400" /> Live PDF Page Layout Preview (A4 Scale)
           </span>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => { playBeep('click'); setShowUploadJadwalModal(true); }}
+              className="px-2.5 py-1 text-[10px] font-bold uppercase rounded bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white border border-blue-400/40 flex items-center gap-1 transition-all cursor-pointer shadow shadow-blue-950/40"
+              title="Unggah jadwal pertandingan dari file Excel (.xlsx) atau CSV"
+              id="btn-upload-jadwal-topbar"
+            >
+              <Upload className="w-3 h-3 text-blue-200" />
+              <span>Upload Jadwal</span>
+            </button>
             <button
               onClick={() => { playBeep('click'); setEditingTargetMatchId(null); setShowEditJadwalModal(true); }}
               className="px-2.5 py-1 text-[10px] font-bold uppercase rounded bg-purple-900 hover:bg-purple-800 text-purple-200 border border-purple-500/40 flex items-center gap-1 transition-all cursor-pointer shadow"
@@ -1556,6 +1611,23 @@ export default function JadwalTab({ theme, state, tgrState, dispatch }: JadwalTa
         }}
         targetMatchId={editingTargetMatchId}
       />
+
+      {/* Upload Jadwal Modal (Excel / CSV / Teks) */}
+      <UploadJadwalModal
+        isOpen={showUploadJadwalModal}
+        onClose={() => setShowUploadJadwalModal(false)}
+        onApplySchedule={handleApplyUploadedSchedule}
+        currentArenaName={gelanggang ? `Gelanggang ${gelanggang}` : 'Gelanggang 1'}
+        defaultMode="all"
+      />
+
+      {/* Floating Success Toast */}
+      {uploadToastMsg && (
+        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 border border-emerald-400 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-2 animate-bounce">
+          <Check className="w-5 h-5 text-white" />
+          <span className="text-xs font-bold font-mono">{uploadToastMsg}</span>
+        </div>
+      )}
 
     </div>
   );
