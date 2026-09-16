@@ -5,8 +5,8 @@
 
 import express from 'express';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
-import { MatchState, MatchHistory, JuriHit, ScoreBreakdown, DewanPenaltyCorner, BaganCategory, BaganMatch, TGRState, TGRPeserta } from './src/types';
+import fs from 'fs';
+import type { MatchState, MatchHistory, JuriHit, ScoreBreakdown, DewanPenaltyCorner, BaganCategory, BaganMatch, TGRState, TGRPeserta } from './src/types.ts';
 import {
   arenasMap,
   getArena,
@@ -19,7 +19,7 @@ import {
   recalculateArenaTGRScores,
   determineArenaWinner,
   updateArenaBaganWinner
-} from './server/arenas';
+} from './server/arenas.ts';
 import {
   masterDataState,
   createAdminSession,
@@ -31,7 +31,7 @@ import {
   defaultTournamentInfo,
   defaultReferees,
   defaultAssignments
-} from './server/masterData';
+} from './server/masterData.ts';
 import {
   initLocalStorage,
   saveLocalStorage,
@@ -39,7 +39,7 @@ import {
   createLocalBackup,
   exportFullDatabase,
   importFullDatabase
-} from './server/storage';
+} from './server/storage.ts';
 
 const app = express();
 const PORT = 3000;
@@ -1440,7 +1440,10 @@ app.post('/api/action', (req, res) => {
       
       // --- TGR ACTION CASES ---
       case 'TGR_UPDATE_EVENT_INFO': {
-        tgrState.namaEvent = payload.namaEvent || tgrState.namaEvent;
+        if (payload.namaEvent !== undefined) {
+          tgrState.namaEvent = payload.namaEvent;
+          state.namaEvent = payload.namaEvent;
+        }
         tgrState.gelanggang = payload.gelanggang || tgrState.gelanggang;
         tgrState.partai = payload.partai || tgrState.partai;
         tgrState.babak = payload.babak || tgrState.babak;
@@ -1770,17 +1773,38 @@ app.get('/api/history/download', (req, res) => {
 
 // Vite & Static file serving integration
 const setupStaticAndMiddleware = async () => {
-  if (process.env.NODE_ENV !== 'production') {
+  // Determine if running in production mode:
+  // Explicit production flag, bundled file (*.cjs), or when executed without tsx runner
+  const isProduction =
+    process.env.NODE_ENV === 'production' ||
+    (typeof process.argv[1] === 'string' && process.argv[1].endsWith('.cjs')) ||
+    (!process.argv.some((arg) => typeof arg === 'string' && (arg.includes('tsx') || arg.includes('vite'))) &&
+      fs.existsSync(path.join(process.cwd(), 'dist', 'index.html')));
+
+  if (!isProduction) {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
+    // Return standard JSON 404 for unhandled API requests
+    app.all('/api/*', (req, res) => {
+      res.status(404).json({ error: `Endpoint ${req.method} ${req.path} tidak ditemukan.` });
+    });
+
     const distPath = path.join(process.cwd(), 'dist');
+
     app.use(express.static(distPath));
+
     app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      const indexPath = path.join(distPath, 'index.html');
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(404).send('Build aplikasi tidak ditemukan. Pastikan sudah menjalankan npm run build.');
+      }
     });
   }
 

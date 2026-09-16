@@ -8,6 +8,37 @@
   --font-orbitron: "Orbitron", sans-serif;
 }
 
+/* Seamless Hardware-Accelerated Marquee for Tournament Running Header */
+@keyframes marquee-scroll {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.animate-marquee-scroll {
+  display: inline-flex;
+  white-space: nowrap;
+  width: max-content;
+  animation: marquee-scroll 28s linear infinite;
+  will-change: transform;
+}
+
+.animate-marquee-scroll-fast {
+  display: inline-flex;
+  white-space: nowrap;
+  width: max-content;
+  animation: marquee-scroll 18s linear infinite;
+  will-change: transform;
+}
+
+.animate-marquee-scroll:hover,
+.animate-marquee-scroll-fast:hover {
+  animation-play-state: paused;
+}
+
 /* Custom visual scrollbars for historical lists */
 ::-webkit-scrollbar {
   width: 6px;

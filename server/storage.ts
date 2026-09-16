@@ -5,16 +5,16 @@
 
 import fs from 'fs';
 import path from 'path';
-import { arenasMap, ArenaContainer } from './arenas';
+import { arenasMap, type ArenaContainer } from './arenas.ts';
 import {
   masterDataState,
   adminCredentials,
-  AdminCredential,
+  type AdminCredential,
   defaultTournamentInfo,
   defaultReferees,
   defaultAssignments
-} from './masterData';
-import { StorageStatus, StorageFileInfo, MasterDataState } from '../src/types';
+} from './masterData.ts';
+import type { StorageStatus, StorageFileInfo, MasterDataState } from '../src/types.ts';
 
 // Root directory for persistent local server storage
 const DATA_DIR = path.join(process.cwd(), 'data');

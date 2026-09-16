@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { MasterTournamentInfo, MasterReferee, ArenaAssignment, MasterDataState, AdminUser } from '../src/types';
-import { arenasMap } from './arenas';
+import type { MasterTournamentInfo, MasterReferee, ArenaAssignment, MasterDataState, AdminUser } from '../src/types.ts';
+import { arenasMap } from './arenas.ts';
 
 // Default Master Tournament Information
 export const defaultTournamentInfo: MasterTournamentInfo = {

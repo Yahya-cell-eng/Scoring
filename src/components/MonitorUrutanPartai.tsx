@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { MatchState, TGRState, MatchHistory, GelanggangInfo, BaganCategory, BaganMatch, TGRPeserta } from '../types';
 import { playBeep } from '../utils/sound';
+import RunningTournamentHeader from './RunningTournamentHeader';
 
 interface MonitorUrutanPartaiProps {
   state?: MatchState | null;
@@ -509,8 +510,8 @@ export default function MonitorUrutanPartai({
                   LIVE REAL-TIME
                 </span>
               </div>
-              <p className="text-[11px] font-mono text-amber-400/90 uppercase tracking-widest mt-0.5 truncate">
-                {state?.namaEvent || 'KEJUARAAN PENCAK SILAT DIGITAL SCORING'}
+              <p className="text-[10px] font-mono text-slate-400 uppercase tracking-widest mt-0.5">
+                SISTEM ANTREAN & MONITORING GELANGGANG
               </p>
             </div>
           </div>
@@ -686,6 +687,14 @@ export default function MonitorUrutanPartai({
           </button>
         </div>
       </header>
+
+      {/* RUNNING HEADER NAMA KEJUARAAN (TICKER MARQUEE) */}
+      <RunningTournamentHeader
+        tournamentName={state?.namaEvent}
+        gelanggang={selectedArenaFilter !== 'all' ? selectedArenaFilter : undefined}
+        theme="dark"
+        className="border-b border-slate-800"
+      />
 
       {/* Sub-header Filter Bar: Filter Gelanggang & Search */}
       <div className="w-full px-4 py-2 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">

@@ -10,7 +10,7 @@ import {
   ArrowLeft, UserPlus, Trash2, Edit3, Check, Star, Settings, 
   Timer, Play, Pause, RotateCcw, Award, CheckSquare, RefreshCw, LogIn, ChevronRight, FileSpreadsheet,
   QrCode, HelpCircle, Sun, Moon, FileText, CheckCircle, Download, Upload, Info, X, Users, Maximize2, Minimize2,
-  Image as ImageIcon
+  Image as ImageIcon, Trophy, Sparkles
 } from 'lucide-react';
 
 interface TGRSekretarisPanelProps {
@@ -75,7 +75,24 @@ export default function TGRSekretarisPanel({ state, dispatch, onBack, theme, onT
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [showLogoEventModal, setShowLogoEventModal] = useState(false);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
   const [editingPeserta, setEditingPeserta] = useState<TGRPeserta | null>(null);
+
+  // Preset Logos (Standard high-res vector emblems)
+  const PRESET_LOGOS = {
+    ipsi: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="50,5 93,36 77,87 23,87 7,36" fill="%23065f2a" stroke="%23f59e0b" stroke-width="3.5"/><circle cx="50" cy="50" r="28" fill="none" stroke="%23ffffff" stroke-width="1.5"/><circle cx="50" cy="50" r="24" fill="%230b7336" stroke="%23ffffff" stroke-width="1.5"/><path d="M50,26 L50,70 M30,50 L70,50" stroke="%23ffffff" stroke-width="3" stroke-linecap="round"/><circle cx="50" cy="50" r="11" fill="%23dc2626" stroke="%23ffffff" stroke-width="1.5"/><circle cx="50" cy="50" r="3.5" fill="%23ffffff"/></svg>`,
+    kemenpora: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="%23b91c1c" stroke="%23f59e0b" stroke-width="3"/><path d="M50 20 L60 40 L82 42 L65 58 L70 80 L50 68 L30 80 L35 58 L18 42 L40 40 Z" fill="%23fef08a"/><circle cx="50" cy="50" r="16" fill="%230284c7"/><text x="50" y="54" font-size="7" font-weight="900" fill="%23ffffff" text-anchor="middle" font-family="sans-serif">INDONESIA</text></svg>`,
+    silat: `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><path d="M60 10 L105 35 L105 85 L60 110 L15 85 L15 35 Z" fill="%23002277" stroke="%2338bdf8" stroke-width="3"/><path d="M40 60 L60 40 L80 60 L60 80 Z" fill="%2300a859" stroke="%23ffffff" stroke-width="2"/><text x="60" y="65" font-size="10" font-weight="900" fill="%23ffffff" text-anchor="middle" font-family="sans-serif">PENCAK SILAT</text><text x="60" y="98" font-size="8" font-weight="bold" fill="%23facc15" text-anchor="middle" font-family="sans-serif">TGR SENI</text></svg>`
+  };
+
+  const PRESET_EVENT_NAMES = [
+    'KEJUARAAN NASIONAL PENCAK SILAT IPSI 2026',
+    'PIALA KEMENPORA PENCAK SILAT 2026',
+    'KEJURDA PENCAK SILAT SENI TGR 2026',
+    'PEKAN OLAHRAGA PELAJAR PENCAK SILAT 2026',
+    'SIRKUIT NASIONAL PENCAK SILAT INDONESIA 2026'
+  ];
 
   // Form states
   const [formNama, setFormNama] = useState('');
@@ -119,8 +136,76 @@ export default function TGRSekretarisPanel({ state, dispatch, onBack, theme, onT
         user: 'Sekretaris',
         action: `Mengunggah logo ${position} kejuaraan TGR`
       });
+      setSaveSuccessMsg(`Logo ${position} berhasil diunggah!`);
+      setTimeout(() => setSaveSuccessMsg(''), 3000);
     };
     reader.readAsDataURL(file);
+    // Reset the input value so selecting the same file again triggers change
+    e.target.value = '';
+  };
+
+  const handleRemoveSingleLogo = async (position: 'kiri' | 'tengah' | 'kanan') => {
+    playBeep('warning');
+    const payload: any = {};
+    if (position === 'kiri') payload.logoKiri = null;
+    if (position === 'tengah') payload.logoTengah = null;
+    if (position === 'kanan') payload.logoKanan = null;
+    await dispatch('TGR_UPLOAD_LOGOS', payload);
+    await dispatch('TGR_ADD_AUDIT_LOG', {
+      user: 'Sekretaris',
+      action: `Menghapus logo ${position} kejuaraan seni TGR`
+    });
+    setSaveSuccessMsg(`Logo ${position} berhasil dihapus!`);
+    setTimeout(() => setSaveSuccessMsg(''), 3000);
+  };
+
+  const handleResetAllLogos = async () => {
+    showCustomConfirm('Reset Semua Logo', 'Apakah Anda yakin ingin menghapus semua logo monitor (Kiri, Tengah, Kanan)?', async () => {
+      playBeep('warning');
+      await dispatch('TGR_UPLOAD_LOGOS', { logoKiri: null, logoKanan: null, logoTengah: null });
+      await dispatch('TGR_ADD_AUDIT_LOG', {
+        user: 'Sekretaris',
+        action: 'Mereset semua logo layar monitor kejuaraan seni TGR'
+      });
+      setSaveSuccessMsg('Semua logo berhasil dihapus!');
+      setTimeout(() => setSaveSuccessMsg(''), 3000);
+    });
+  };
+
+  const handleApplyPresetLogo = async (position: 'kiri' | 'tengah' | 'kanan', presetKey: 'ipsi' | 'kemenpora' | 'silat') => {
+    playBeep('valid');
+    const presetData = PRESET_LOGOS[presetKey];
+    if (!presetData) return;
+    const payload: any = {};
+    if (position === 'kiri') payload.logoKiri = presetData;
+    if (position === 'tengah') payload.logoTengah = presetData;
+    if (position === 'kanan') payload.logoKanan = presetData;
+    await dispatch('TGR_UPLOAD_LOGOS', payload);
+    await dispatch('TGR_ADD_AUDIT_LOG', {
+      user: 'Sekretaris',
+      action: `Menerapkan preset logo ${presetKey.toUpperCase()} pada posisi ${position} seni TGR`
+    });
+    setSaveSuccessMsg(`Preset logo ${presetKey.toUpperCase()} berhasil diterapkan!`);
+    setTimeout(() => setSaveSuccessMsg(''), 3000);
+  };
+
+  const handleSaveNamaEventOnly = async (nameToSave?: string) => {
+    const finalName = (nameToSave !== undefined ? nameToSave : formNamaEvent).trim();
+    if (!finalName) {
+      showCustomAlert('Nama Kejuaraan Kosong', 'Harap masukkan nama kejuaraan.');
+      return;
+    }
+    playBeep('valid');
+    await dispatch('TGR_UPDATE_EVENT_INFO', {
+      namaEvent: finalName
+    });
+    await dispatch('TGR_ADD_AUDIT_LOG', {
+      user: 'Sekretaris',
+      action: `Memperbarui nama kejuaraan seni TGR menjadi: ${finalName}`
+    });
+    setFormNamaEvent(finalName);
+    setSaveSuccessMsg('Nama kejuaraan berhasil disimpan!');
+    setTimeout(() => setSaveSuccessMsg(''), 3000);
   };
 
   // Sync settings when state changes from other devices
@@ -693,6 +778,23 @@ export default function TGRSekretarisPanel({ state, dispatch, onBack, theme, onT
             <span>Barcode System</span>
           </button>
 
+          <button
+            onClick={() => { playBeep('click'); setShowLogoEventModal(true); }}
+            className={`px-3 py-1.5 text-xs cursor-pointer rounded-lg transition-all font-extrabold uppercase flex items-center gap-1.5 border shadow-sm hover:scale-105 active:scale-95 duration-200 ${
+              theme === 'dark' 
+                ? 'bg-amber-950/40 hover:bg-amber-900/60 border-amber-800/80 text-amber-300' 
+                : 'bg-amber-50 hover:bg-amber-100 border-amber-300 text-amber-800'
+            }`}
+            title="Pengaturan Logo Layar Monitor & Nama Kejuaraan Seni"
+          >
+            <Trophy className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="hidden sm:inline">Logo & Nama Kejuaraan</span>
+            <span className="sm:hidden">Logo</span>
+            {(state.logoKiri || state.logoTengah || state.logoKanan) && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" title="Logo aktif" />
+            )}
+          </button>
+
           <div className={`h-5 w-[1px] ${theme === 'dark' ? 'bg-slate-850' : 'bg-slate-250'} mx-1`} />
           <div className="flex items-center gap-1.5">
             <FileText className="w-4 h-4 text-amber-500" />
@@ -998,6 +1100,209 @@ export default function TGRSekretarisPanel({ state, dispatch, onBack, theme, onT
                     </div>
                   </div>
                 </div>
+
+                {/* Card Pengaturan Logo & Nama Kejuaraan Seni */}
+                <div className={`p-4 rounded-2xl border ${
+                  theme === 'dark' ? 'bg-slate-900/60 border-slate-800' : 'bg-white border-slate-200 shadow-sm'
+                }`}>
+                  <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5 mb-3">
+                    <div className="flex items-center gap-2">
+                      <Trophy className="w-4 h-4 text-amber-500" />
+                      <h3 className="text-[11px] font-black font-sport tracking-widest text-amber-500 uppercase">
+                        LOGO & NAMA KEJUARAAN SENI
+                      </h3>
+                    </div>
+                    <button
+                      onClick={() => { playBeep('click'); setShowLogoEventModal(true); }}
+                      className={`px-2 py-1 text-[10px] font-bold rounded cursor-pointer flex items-center gap-1 border transition-colors ${
+                        theme === 'dark'
+                          ? 'bg-slate-800 hover:bg-slate-750 text-amber-400 border-slate-700'
+                          : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                      }`}
+                      title="Buka Pengaturan Lengkap Logo dan Nama Kejuaraan"
+                    >
+                      <Settings className="w-3 h-3" />
+                      <span>Pengaturan Lengkap</span>
+                    </button>
+                  </div>
+
+                  {/* Current Tournament Name & Quick Edit */}
+                  <div className="mb-3">
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-[9px] font-mono font-bold text-slate-400 uppercase">
+                        Nama Kejuaraan (Layar Monitor & Cetak)
+                      </span>
+                      {state.namaEvent && (
+                        <span className="text-[9px] text-emerald-400 font-mono font-bold">● Terhubung</span>
+                      )}
+                    </div>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        value={formNamaEvent}
+                        onChange={(e) => setFormNamaEvent(e.target.value)}
+                        placeholder="Masukkan Nama Kejuaraan / Turnamen..."
+                        className={`flex-1 py-1.5 px-2.5 text-xs font-bold rounded-lg border outline-none font-mono ${
+                          theme === 'dark'
+                            ? 'bg-slate-950 border-slate-800 text-amber-300 focus:border-amber-500'
+                            : 'bg-white border-slate-300 text-slate-800 focus:border-amber-500'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleSaveNamaEventOnly()}
+                        className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black uppercase text-[10px] rounded-lg transition-transform active:scale-95 cursor-pointer flex items-center gap-1"
+                        title="Simpan Nama Kejuaraan"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Simpan</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 3 Logo Slots Preview & Quick Upload */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[9px] font-mono font-bold text-slate-400 uppercase">
+                        Slot 3 Logo Monitor Seni
+                      </span>
+                      {(state.logoKiri || state.logoTengah || state.logoKanan) && (
+                        <button
+                          type="button"
+                          onClick={handleResetAllLogos}
+                          className="text-[9px] text-red-500 hover:text-red-400 font-bold uppercase tracking-wider bg-transparent p-0 border-0 cursor-pointer"
+                        >
+                          Reset Semua
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      {/* Slot Logo Kiri */}
+                      <div className={`p-2 rounded-xl border flex flex-col items-center justify-between text-center ${
+                        state.logoKiri
+                          ? (theme === 'dark' ? 'bg-cyan-950/20 border-cyan-800/60' : 'bg-cyan-50/50 border-cyan-200')
+                          : (theme === 'dark' ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200')
+                      }`}>
+                        <span className="text-[8px] font-mono font-extrabold uppercase text-cyan-400 tracking-wider mb-1">
+                          LOGO KIRI
+                        </span>
+                        <div className="w-12 h-12 rounded-lg bg-black/20 flex items-center justify-center p-1 overflow-hidden my-1">
+                          {state.logoKiri ? (
+                            <img src={state.logoKiri} alt="Logo Kiri" className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
+                          ) : (
+                            <ImageIcon className="w-5 h-5 text-slate-500" />
+                          )}
+                        </div>
+                        <span className="text-[8px] text-slate-400 truncate max-w-full font-sans mb-1.5">
+                          {state.logoKiri ? '✓ Aktif' : 'Kosong'}
+                        </span>
+                        <div className="flex gap-1 w-full">
+                          <button
+                            type="button"
+                            onClick={() => { playBeep('click'); fileInputKiriRef.current?.click(); }}
+                            className="flex-1 py-1 text-[8px] font-bold uppercase rounded bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
+                            title="Upload Logo Kiri"
+                          >
+                            {state.logoKiri ? 'Ganti' : 'Pilih'}
+                          </button>
+                          {state.logoKiri && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSingleLogo('kiri')}
+                              className="px-1.5 py-1 text-[8px] font-bold uppercase rounded bg-red-950/40 text-red-400 hover:bg-red-900/50 cursor-pointer"
+                              title="Hapus Logo Kiri"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Slot Logo Tengah */}
+                      <div className={`p-2 rounded-xl border flex flex-col items-center justify-between text-center ${
+                        state.logoTengah
+                          ? (theme === 'dark' ? 'bg-amber-950/20 border-amber-800/60' : 'bg-amber-50/50 border-amber-200')
+                          : (theme === 'dark' ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200')
+                      }`}>
+                        <span className="text-[8px] font-mono font-extrabold uppercase text-amber-400 tracking-wider mb-1">
+                          LOGO TENGAH
+                        </span>
+                        <div className="w-12 h-12 rounded-lg bg-black/20 flex items-center justify-center p-1 overflow-hidden my-1">
+                          {state.logoTengah ? (
+                            <img src={state.logoTengah} alt="Logo Tengah" className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
+                          ) : (
+                            <ImageIcon className="w-5 h-5 text-slate-500" />
+                          )}
+                        </div>
+                        <span className="text-[8px] text-slate-400 truncate max-w-full font-sans mb-1.5">
+                          {state.logoTengah ? '✓ Aktif' : 'Kosong'}
+                        </span>
+                        <div className="flex gap-1 w-full">
+                          <button
+                            type="button"
+                            onClick={() => { playBeep('click'); fileInputTengahRef.current?.click(); }}
+                            className="flex-1 py-1 text-[8px] font-bold uppercase rounded bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
+                            title="Upload Logo Tengah"
+                          >
+                            {state.logoTengah ? 'Ganti' : 'Pilih'}
+                          </button>
+                          {state.logoTengah && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSingleLogo('tengah')}
+                              className="px-1.5 py-1 text-[8px] font-bold uppercase rounded bg-red-950/40 text-red-400 hover:bg-red-900/50 cursor-pointer"
+                              title="Hapus Logo Tengah"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Slot Logo Kanan */}
+                      <div className={`p-2 rounded-xl border flex flex-col items-center justify-between text-center ${
+                        state.logoKanan
+                          ? (theme === 'dark' ? 'bg-red-950/20 border-red-800/60' : 'bg-red-50/50 border-red-200')
+                          : (theme === 'dark' ? 'bg-slate-950/60 border-slate-800' : 'bg-slate-50 border-slate-200')
+                      }`}>
+                        <span className="text-[8px] font-mono font-extrabold uppercase text-red-400 tracking-wider mb-1">
+                          LOGO KANAN
+                        </span>
+                        <div className="w-12 h-12 rounded-lg bg-black/20 flex items-center justify-center p-1 overflow-hidden my-1">
+                          {state.logoKanan ? (
+                            <img src={state.logoKanan} alt="Logo Kanan" className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
+                          ) : (
+                            <ImageIcon className="w-5 h-5 text-slate-500" />
+                          )}
+                        </div>
+                        <span className="text-[8px] text-slate-400 truncate max-w-full font-sans mb-1.5">
+                          {state.logoKanan ? '✓ Aktif' : 'Kosong'}
+                        </span>
+                        <div className="flex gap-1 w-full">
+                          <button
+                            type="button"
+                            onClick={() => { playBeep('click'); fileInputKananRef.current?.click(); }}
+                            className="flex-1 py-1 text-[8px] font-bold uppercase rounded bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
+                            title="Upload Logo Kanan"
+                          >
+                            {state.logoKanan ? 'Ganti' : 'Pilih'}
+                          </button>
+                          {state.logoKanan && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSingleLogo('kanan')}
+                              className="px-1.5 py-1 text-[8px] font-bold uppercase rounded bg-red-950/40 text-red-400 hover:bg-red-900/50 cursor-pointer"
+                              title="Hapus Logo Kanan"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Right Column (Col 7): Live Scoreboard Recipient */}
@@ -1230,88 +1535,110 @@ export default function TGRSekretarisPanel({ state, dispatch, onBack, theme, onT
                         <ImageIcon className="w-3.5 h-3.5" />
                         <span>Logo Layar Monitor (TGR & Partai)</span>
                       </span>
-                      {(state.logoKiri || state.logoKanan || state.logoTengah) && (
+                      <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => {
-                            playBeep('warning');
-                            dispatch('TGR_UPLOAD_LOGOS', { logoKiri: null, logoKanan: null, logoTengah: null });
-                          }}
-                          className="text-[9px] text-red-500 hover:text-red-400 font-bold uppercase tracking-wider bg-transparent p-0 border-0 cursor-pointer"
+                          onClick={() => { playBeep('click'); setShowLogoEventModal(true); }}
+                          className="text-[9px] text-amber-400 hover:text-amber-300 font-bold uppercase tracking-wider bg-transparent p-0 border-0 cursor-pointer flex items-center gap-0.5"
                         >
-                          Reset All
+                          <Settings className="w-2.5 h-2.5" />
+                          <span>Pengaturan Lengkap</span>
                         </button>
-                      )}
+                        {(state.logoKiri || state.logoKanan || state.logoTengah) && (
+                          <button
+                            type="button"
+                            onClick={handleResetAllLogos}
+                            className="text-[9px] text-red-500 hover:text-red-400 font-bold uppercase tracking-wider bg-transparent p-0 border-0 cursor-pointer"
+                          >
+                            Reset All
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="grid grid-cols-3 gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => { playBeep('click'); fileInputKiriRef.current?.click(); }}
-                        className={`py-2 px-1 cursor-pointer hover:bg-slate-800 border text-[9px] uppercase font-bold rounded flex flex-col items-center justify-center gap-1 transition-all ${
-                          state.logoKiri ? 'bg-cyan-950/40 border-cyan-700 text-cyan-300' : 'bg-slate-900 border-slate-800 text-slate-400'
-                        }`}
-                        title="Upload Logo Kejuaraan (Kiri)"
-                      >
-                        {state.logoKiri ? (
-                          <img src={state.logoKiri} alt="Logo Kiri" className="w-5 h-5 object-contain" referrerPolicy="no-referrer" />
-                        ) : (
-                          <ImageIcon className="w-3.5 h-3.5 text-cyan-400" />
+                      {/* Logo Kiri */}
+                      <div className="flex flex-col gap-1">
+                        <button
+                          type="button"
+                          onClick={() => { playBeep('click'); fileInputKiriRef.current?.click(); }}
+                          className={`py-2 px-1 cursor-pointer hover:bg-slate-800 border text-[9px] uppercase font-bold rounded flex flex-col items-center justify-center gap-1 transition-all ${
+                            state.logoKiri ? 'bg-cyan-950/40 border-cyan-700 text-cyan-300' : 'bg-slate-900 border-slate-800 text-slate-400'
+                          }`}
+                          title="Upload Logo Kejuaraan (Kiri)"
+                        >
+                          {state.logoKiri ? (
+                            <img src={state.logoKiri} alt="Logo Kiri" className="w-6 h-6 object-contain" referrerPolicy="no-referrer" />
+                          ) : (
+                            <ImageIcon className="w-3.5 h-3.5 text-cyan-400" />
+                          )}
+                          <span className="truncate max-w-full">Logo Kiri</span>
+                        </button>
+                        {state.logoKiri && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSingleLogo('kiri')}
+                            className="w-full py-0.5 text-[8px] font-bold text-red-400 bg-red-950/30 hover:bg-red-900/40 rounded border border-red-900/50 uppercase cursor-pointer"
+                          >
+                            Hapus
+                          </button>
                         )}
-                        <span className="truncate max-w-full">Logo Kiri</span>
-                      </button>
-                      <input
-                        type="file"
-                        ref={fileInputKiriRef}
-                        accept="image/*"
-                        onChange={(e) => handleLogoUpload('kiri', e)}
-                        className="hidden"
-                      />
+                      </div>
 
-                      <button
-                        type="button"
-                        onClick={() => { playBeep('click'); fileInputTengahRef.current?.click(); }}
-                        className={`py-2 px-1 cursor-pointer hover:bg-slate-800 border text-[9px] uppercase font-bold rounded flex flex-col items-center justify-center gap-1 transition-all ${
-                          state.logoTengah ? 'bg-amber-950/40 border-amber-700 text-amber-300' : 'bg-slate-900 border-slate-800 text-slate-400'
-                        }`}
-                        title="Upload Logo Event / Kejuaraan (Tengah)"
-                      >
-                        {state.logoTengah ? (
-                          <img src={state.logoTengah} alt="Logo Tengah" className="w-5 h-5 object-contain" referrerPolicy="no-referrer" />
-                        ) : (
-                          <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
+                      {/* Logo Tengah */}
+                      <div className="flex flex-col gap-1">
+                        <button
+                          type="button"
+                          onClick={() => { playBeep('click'); fileInputTengahRef.current?.click(); }}
+                          className={`py-2 px-1 cursor-pointer hover:bg-slate-800 border text-[9px] uppercase font-bold rounded flex flex-col items-center justify-center gap-1 transition-all ${
+                            state.logoTengah ? 'bg-amber-950/40 border-amber-700 text-amber-300' : 'bg-slate-900 border-slate-800 text-slate-400'
+                          }`}
+                          title="Upload Logo Event / Kejuaraan (Tengah)"
+                        >
+                          {state.logoTengah ? (
+                            <img src={state.logoTengah} alt="Logo Tengah" className="w-6 h-6 object-contain" referrerPolicy="no-referrer" />
+                          ) : (
+                            <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
+                          )}
+                          <span className="truncate max-w-full">Logo Tengah</span>
+                        </button>
+                        {state.logoTengah && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSingleLogo('tengah')}
+                            className="w-full py-0.5 text-[8px] font-bold text-red-400 bg-red-950/30 hover:bg-red-900/40 rounded border border-red-900/50 uppercase cursor-pointer"
+                          >
+                            Hapus
+                          </button>
                         )}
-                        <span className="truncate max-w-full">Logo Tengah</span>
-                      </button>
-                      <input
-                        type="file"
-                        ref={fileInputTengahRef}
-                        accept="image/*"
-                        onChange={(e) => handleLogoUpload('tengah', e)}
-                        className="hidden"
-                      />
+                      </div>
 
-                      <button
-                        type="button"
-                        onClick={() => { playBeep('click'); fileInputKananRef.current?.click(); }}
-                        className={`py-2 px-1 cursor-pointer hover:bg-slate-800 border text-[9px] uppercase font-bold rounded flex flex-col items-center justify-center gap-1 transition-all ${
-                          state.logoKanan ? 'bg-red-950/40 border-red-700 text-red-300' : 'bg-slate-900 border-slate-800 text-slate-400'
-                        }`}
-                        title="Upload Logo IPSI (Kanan)"
-                      >
-                        {state.logoKanan ? (
-                          <img src={state.logoKanan} alt="Logo Kanan" className="w-5 h-5 object-contain" referrerPolicy="no-referrer" />
-                        ) : (
-                          <ImageIcon className="w-3.5 h-3.5 text-red-400" />
+                      {/* Logo Kanan */}
+                      <div className="flex flex-col gap-1">
+                        <button
+                          type="button"
+                          onClick={() => { playBeep('click'); fileInputKananRef.current?.click(); }}
+                          className={`py-2 px-1 cursor-pointer hover:bg-slate-800 border text-[9px] uppercase font-bold rounded flex flex-col items-center justify-center gap-1 transition-all ${
+                            state.logoKanan ? 'bg-red-950/40 border-red-700 text-red-300' : 'bg-slate-900 border-slate-800 text-slate-400'
+                          }`}
+                          title="Upload Logo IPSI (Kanan)"
+                        >
+                          {state.logoKanan ? (
+                            <img src={state.logoKanan} alt="Logo Kanan" className="w-6 h-6 object-contain" referrerPolicy="no-referrer" />
+                          ) : (
+                            <ImageIcon className="w-3.5 h-3.5 text-red-400" />
+                          )}
+                          <span className="truncate max-w-full">Logo Kanan</span>
+                        </button>
+                        {state.logoKanan && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSingleLogo('kanan')}
+                            className="w-full py-0.5 text-[8px] font-bold text-red-400 bg-red-950/30 hover:bg-red-900/40 rounded border border-red-900/50 uppercase cursor-pointer"
+                          >
+                            Hapus
+                          </button>
                         )}
-                        <span className="truncate max-w-full">Logo Kanan</span>
-                      </button>
-                      <input
-                        type="file"
-                        ref={fileInputKananRef}
-                        accept="image/*"
-                        onChange={(e) => handleLogoUpload('kanan', e)}
-                        className="hidden"
-                      />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1871,7 +2198,381 @@ export default function TGRSekretarisPanel({ state, dispatch, onBack, theme, onT
           </motion.div>
         )}
 
+        {/* Modal Pengaturan Logo & Nama Kejuaraan Seni */}
+        {showLogoEventModal && (
+          <motion.div
+            key="logo-event-modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 z-[99999] overflow-y-auto"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className={`w-full max-w-2xl border rounded-2xl p-5 sm:p-6 shadow-2xl space-y-4 my-6 max-h-[90vh] overflow-y-auto ${
+                theme === 'dark' ? 'bg-slate-900 border-amber-500/30 text-white' : 'bg-white border-slate-200 text-slate-900'
+              }`}
+            >
+              {/* Header Modal */}
+              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center">
+                    <Trophy className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black font-sport tracking-wider text-amber-400 uppercase">
+                      PENGATURAN LOGO & NAMA KEJUARAAN SENI (TGR)
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-mono">
+                      Konfigurasi identitas turnamen, header berjalan, monitor TGR, dan dokumen cetak
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowLogoEventModal(false)}
+                  className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {saveSuccessMsg && (
+                <div className="p-2.5 rounded-xl bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{saveSuccessMsg}</span>
+                </div>
+              )}
+
+              {/* Bagian 1: Nama Kejuaraan */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-mono font-extrabold uppercase text-amber-400 tracking-wider">
+                    NAMA KEJUARAAN / TURNAMEN PENCAK SILAT
+                  </label>
+                  <span className="text-[9px] text-slate-400 font-mono">Tampil di Monitor & Running Marquee</span>
+                </div>
+                
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={formNamaEvent}
+                    onChange={(e) => setFormNamaEvent(e.target.value)}
+                    placeholder="Contoh: KEJUARAAN NASIONAL PENCAK SILAT IPSI 2026"
+                    className={`flex-1 py-2 px-3 text-xs font-bold rounded-xl border outline-none font-mono ${
+                      theme === 'dark'
+                        ? 'bg-slate-950 border-slate-800 text-white focus:border-amber-500'
+                        : 'bg-slate-50 border-slate-300 text-slate-900 focus:border-amber-500'
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleSaveNamaEventOnly()}
+                    className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black uppercase text-xs rounded-xl transition-transform active:scale-95 cursor-pointer flex items-center gap-1.5 shadow"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Simpan</span>
+                  </button>
+                </div>
+
+                {/* Live Running Marquee Simulation */}
+                <div className="p-3 rounded-xl bg-black/40 border border-amber-900/30 overflow-hidden relative mt-2">
+                  <div className="flex justify-between items-center text-[8px] font-mono uppercase text-amber-500/80 mb-1.5">
+                    <span>⚡ SIMULASI HEADER BERJALAN PADA MONITOR:</span>
+                    <span className="bg-amber-950/60 px-2 py-0.5 rounded text-amber-300 font-bold">LIVE PREVIEW</span>
+                  </div>
+                  <div className="py-2 px-3 bg-gradient-to-r from-amber-950/30 via-slate-900 to-amber-950/30 rounded-lg border border-amber-500/20 text-center truncate">
+                    <span className="text-sm font-black tracking-wider text-amber-400 uppercase drop-shadow-[0_2px_8px_rgba(245,158,11,0.3)]">
+                      🏆 {formNamaEvent.trim() || 'KEJUARAAN NASIONAL PENCAK SILAT IPSI 2026'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Preset Name Suggestions */}
+                <div>
+                  <span className="text-[9px] font-mono text-slate-400 uppercase block mb-1">
+                    Pilihan Nama Cepat:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {PRESET_EVENT_NAMES.map((name, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setFormNamaEvent(name);
+                          handleSaveNamaEventOnly(name);
+                        }}
+                        className={`text-[9px] font-bold px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                          formNamaEvent === name
+                            ? 'bg-amber-500/20 border-amber-500 text-amber-300'
+                            : 'bg-slate-800/40 border-slate-700/60 text-slate-400 hover:text-white hover:bg-slate-800'
+                        }`}
+                      >
+                        + {name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Bagian 2: Tiga Slot Logo */}
+              <div className="space-y-3 pt-3 border-t border-slate-800/80">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-[10px] font-mono font-extrabold uppercase text-amber-400 tracking-wider">
+                      PENGATURAN 3 SLOT LOGO MONITOR & DOKUMEN CETAK
+                    </h4>
+                    <p className="text-[9px] text-slate-400 font-mono">
+                      Dukungan format gambar: PNG, JPG, SVG, WebP transparan
+                    </p>
+                  </div>
+                  {(state.logoKiri || state.logoTengah || state.logoKanan) && (
+                    <button
+                      type="button"
+                      onClick={handleResetAllLogos}
+                      className="text-[9px] text-red-400 hover:text-red-300 font-bold uppercase tracking-wider px-2 py-1 rounded bg-red-950/30 border border-red-900/40 cursor-pointer"
+                    >
+                      Hapus Semua Logo
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {/* Slot 1: Logo Kiri */}
+                  <div className={`p-3 rounded-xl border flex flex-col justify-between ${
+                    state.logoKiri
+                      ? (theme === 'dark' ? 'bg-cyan-950/20 border-cyan-800' : 'bg-cyan-50/50 border-cyan-200')
+                      : (theme === 'dark' ? 'bg-slate-950/40 border-slate-800' : 'bg-slate-50 border-slate-200')
+                  }`}>
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[9px] font-mono font-extrabold uppercase text-cyan-400">
+                          LOGO KIRI
+                        </span>
+                        <span className="text-[8px] bg-cyan-950/60 text-cyan-300 px-1.5 py-0.5 rounded font-mono font-bold">
+                          Kiri Atas
+                        </span>
+                      </div>
+                      <p className="text-[9px] text-slate-400 mb-2">
+                        Logo Kejuaraan / Lambang Pemda / Tuan Rumah
+                      </p>
+
+                      {/* Preview Box */}
+                      <div className="w-full h-24 rounded-lg bg-black/25 border border-slate-800/80 flex items-center justify-center p-2 mb-2">
+                        {state.logoKiri ? (
+                          <img src={state.logoKiri} alt="Logo Kiri" className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
+                        ) : (
+                          <div className="text-center text-slate-500 flex flex-col items-center gap-1">
+                            <ImageIcon className="w-6 h-6" />
+                            <span className="text-[9px]">Belum Ada Logo</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => { playBeep('click'); fileInputKiriRef.current?.click(); }}
+                          className="flex-1 py-1.5 px-2 bg-cyan-600 hover:bg-cyan-500 text-white font-black text-[9px] uppercase rounded-lg cursor-pointer flex items-center justify-center gap-1"
+                        >
+                          <Upload className="w-3 h-3" />
+                          <span>{state.logoKiri ? 'Ganti' : 'Pilih File'}</span>
+                        </button>
+                        {state.logoKiri && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSingleLogo('kiri')}
+                            className="py-1.5 px-2 bg-red-950/40 hover:bg-red-900/50 text-red-400 font-bold text-[9px] uppercase rounded-lg cursor-pointer flex items-center gap-1"
+                            title="Hapus Logo Kiri"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleApplyPresetLogo('kiri', 'silat')}
+                        className="w-full py-1 text-[8px] font-bold text-slate-400 hover:text-cyan-300 bg-slate-800/40 hover:bg-slate-800 rounded border border-slate-700/50 uppercase cursor-pointer"
+                      >
+                        Gunakan Logo Silat TGR
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Slot 2: Logo Tengah */}
+                  <div className={`p-3 rounded-xl border flex flex-col justify-between ${
+                    state.logoTengah
+                      ? (theme === 'dark' ? 'bg-amber-950/20 border-amber-800' : 'bg-amber-50/50 border-amber-200')
+                      : (theme === 'dark' ? 'bg-slate-950/40 border-slate-800' : 'bg-slate-50 border-slate-200')
+                  }`}>
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[9px] font-mono font-extrabold uppercase text-amber-400">
+                          LOGO TENGAH
+                        </span>
+                        <span className="text-[8px] bg-amber-950/60 text-amber-300 px-1.5 py-0.5 rounded font-mono font-bold">
+                          Tengah Layar
+                        </span>
+                      </div>
+                      <p className="text-[9px] text-slate-400 mb-2">
+                        Logo Event / Sponsor / Maskot Resmi
+                      </p>
+
+                      {/* Preview Box */}
+                      <div className="w-full h-24 rounded-lg bg-black/25 border border-slate-800/80 flex items-center justify-center p-2 mb-2">
+                        {state.logoTengah ? (
+                          <img src={state.logoTengah} alt="Logo Tengah" className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
+                        ) : (
+                          <div className="text-center text-slate-500 flex flex-col items-center gap-1">
+                            <ImageIcon className="w-6 h-6" />
+                            <span className="text-[9px]">Belum Ada Logo</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => { playBeep('click'); fileInputTengahRef.current?.click(); }}
+                          className="flex-1 py-1.5 px-2 bg-amber-600 hover:bg-amber-500 text-white font-black text-[9px] uppercase rounded-lg cursor-pointer flex items-center justify-center gap-1"
+                        >
+                          <Upload className="w-3 h-3" />
+                          <span>{state.logoTengah ? 'Ganti' : 'Pilih File'}</span>
+                        </button>
+                        {state.logoTengah && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSingleLogo('tengah')}
+                            className="py-1.5 px-2 bg-red-950/40 hover:bg-red-900/50 text-red-400 font-bold text-[9px] uppercase rounded-lg cursor-pointer flex items-center gap-1"
+                            title="Hapus Logo Tengah"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleApplyPresetLogo('tengah', 'kemenpora')}
+                        className="w-full py-1 text-[8px] font-bold text-slate-400 hover:text-amber-300 bg-slate-800/40 hover:bg-slate-800 rounded border border-slate-700/50 uppercase cursor-pointer"
+                      >
+                        Gunakan Logo Kemenpora
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Slot 3: Logo Kanan */}
+                  <div className={`p-3 rounded-xl border flex flex-col justify-between ${
+                    state.logoKanan
+                      ? (theme === 'dark' ? 'bg-red-950/20 border-red-800' : 'bg-red-50/50 border-red-200')
+                      : (theme === 'dark' ? 'bg-slate-950/40 border-slate-800' : 'bg-slate-50 border-slate-200')
+                  }`}>
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[9px] font-mono font-extrabold uppercase text-red-400">
+                          LOGO KANAN
+                        </span>
+                        <span className="text-[8px] bg-red-950/60 text-red-300 px-1.5 py-0.5 rounded font-mono font-bold">
+                          Kanan Atas
+                        </span>
+                      </div>
+                      <p className="text-[9px] text-slate-400 mb-2">
+                        Logo Resmi IPSI / Federasi Pencak Silat
+                      </p>
+
+                      {/* Preview Box */}
+                      <div className="w-full h-24 rounded-lg bg-black/25 border border-slate-800/80 flex items-center justify-center p-2 mb-2">
+                        {state.logoKanan ? (
+                          <img src={state.logoKanan} alt="Logo Kanan" className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
+                        ) : (
+                          <div className="text-center text-slate-500 flex flex-col items-center gap-1">
+                            <ImageIcon className="w-6 h-6" />
+                            <span className="text-[9px]">Belum Ada Logo</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => { playBeep('click'); fileInputKananRef.current?.click(); }}
+                          className="flex-1 py-1.5 px-2 bg-red-600 hover:bg-red-500 text-white font-black text-[9px] uppercase rounded-lg cursor-pointer flex items-center justify-center gap-1"
+                        >
+                          <Upload className="w-3 h-3" />
+                          <span>{state.logoKanan ? 'Ganti' : 'Pilih File'}</span>
+                        </button>
+                        {state.logoKanan && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSingleLogo('kanan')}
+                            className="py-1.5 px-2 bg-red-950/40 hover:bg-red-900/50 text-red-400 font-bold text-[9px] uppercase rounded-lg cursor-pointer flex items-center gap-1"
+                            title="Hapus Logo Kanan"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleApplyPresetLogo('kanan', 'ipsi')}
+                        className="w-full py-1 text-[8px] font-bold text-slate-400 hover:text-red-300 bg-slate-800/40 hover:bg-slate-800 rounded border border-slate-700/50 uppercase cursor-pointer"
+                      >
+                        Gunakan Logo Standar IPSI
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex justify-end pt-3 border-t border-slate-800/80">
+                <button
+                  type="button"
+                  onClick={() => setShowLogoEventModal(false)}
+                  className={`px-5 py-2 text-xs font-bold uppercase rounded-xl border transition-colors cursor-pointer ${
+                    theme === 'dark'
+                      ? 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-white'
+                      : 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800'
+                  }`}
+                >
+                  Selesai & Tutup
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
       </AnimatePresence>
+
+      {/* Global Hidden File Inputs for Logos */}
+      <input
+        type="file"
+        ref={fileInputKiriRef}
+        accept="image/*"
+        onChange={(e) => handleLogoUpload('kiri', e)}
+        className="hidden"
+      />
+      <input
+        type="file"
+        ref={fileInputTengahRef}
+        accept="image/*"
+        onChange={(e) => handleLogoUpload('tengah', e)}
+        className="hidden"
+      />
+      <input
+        type="file"
+        ref={fileInputKananRef}
+        accept="image/*"
+        onChange={(e) => handleLogoUpload('kanan', e)}
+        className="hidden"
+      />
 
       {/* 4. FOOTER STATUS BAR */}
       <footer className={`border-t px-4 py-2 flex items-center justify-between text-[8px] font-mono tracking-widest uppercase flex-shrink-0 ${

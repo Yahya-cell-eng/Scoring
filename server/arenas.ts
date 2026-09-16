@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { MatchState, MatchHistory, JuriHit, ScoreBreakdown, DewanPenaltyCorner, BaganCategory, BaganMatch, TGRState, TGRPeserta, GelanggangInfo, ArenaSummary } from '../src/types';
+import type { MatchState, MatchHistory, JuriHit, ScoreBreakdown, DewanPenaltyCorner, BaganCategory, BaganMatch, TGRState, TGRPeserta, GelanggangInfo, ArenaSummary } from '../src/types.ts';
 
 export interface ArenaContainer {
   info: GelanggangInfo;

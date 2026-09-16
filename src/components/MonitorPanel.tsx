@@ -16,6 +16,7 @@ import { playBeep, announceWinnerVoice } from '../utils/sound';
 import ThemePaletteSelector from './ThemePaletteSelector';
 import { useThemePalette } from '../services/themeService';
 import AnimatedScore from './AnimatedScore';
+import RunningTournamentHeader from './RunningTournamentHeader';
 
 interface MonitorPanelProps {
   state: MatchState;
@@ -465,22 +466,24 @@ export default function MonitorPanel({ state, onBack, theme, onToggleTheme }: Mo
         }}
       >
 
-        {/* 1. Header (Monitor Match Stats & Logos) styled in elite IPSI grey-blue format */}
-        <div className={`border py-2.5 px-3 md:py-3.5 md:px-6 rounded-2xl shadow-sm z-10 flex-shrink-0 relative transition-all duration-300 ${
+        {/* 1. Header (Monitor Match Stats & Logos with Integrated Running Header) */}
+        <div className={`border rounded-2xl shadow-sm z-10 flex-shrink-0 relative transition-all duration-300 overflow-hidden ${
           theme === 'dark' ? 'bg-[#151d30] border-[#1e293b] text-slate-100' : 'bg-[#cbd5e1] border border-slate-300 text-slate-800'
         }`}>
           
-          {/* Centered pill for 'Pencak silat' tab or custom event name with logo */}
-          <div className={`absolute top-0 left-1/2 -translate-x-1/2 -translate-y-[1px] text-[9px] md:text-xs font-black tracking-widest px-4 md:px-8 py-1 md:py-1.5 rounded-b-xl shadow-md uppercase font-sans flex items-center justify-center gap-2 transition-all z-20 ${
-            theme === 'dark' ? 'bg-[#0f172a] text-slate-300 border-x border-b border-slate-800' : 'bg-[#1e293b] text-white'
-          }`}>
-            {(state.logoTengah || state.logoKiri) ? (
-              <img src={state.logoTengah || state.logoKiri || undefined} alt="Logo Kejuaraan" className="w-4 h-4 md:w-5 md:h-5 object-contain" referrerPolicy="no-referrer" />
-            ) : null}
-            <span className="truncate max-w-[140px] md:max-w-none">{state.namaEvent || "Pencak Silat"}</span>
-          </div>
+          {/* Header Berjalan (Running Header Marquee Nama Kejuaraan) */}
+          <RunningTournamentHeader
+            tournamentName={state.namaEvent}
+            gelanggang={state.gelanggang || 'A'}
+            partai={state.partai}
+            kategori={`KELAS ${state.kelas} ${state.gender}`}
+            babak={state.currentBabak}
+            theme={theme}
+            logoLeft={state.logoKiri || state.logoTengah}
+            className="w-full border-b"
+          />
 
-          <div className="flex items-center justify-between mt-1 flex-wrap gap-2">
+          <div className="py-2 px-3 md:py-2.5 md:px-6 flex items-center justify-between flex-wrap gap-2">
             
             {/* Far Left Controls group */}
             <div className="flex items-center gap-1.5 md:gap-2.5 flex-wrap">
@@ -642,7 +645,7 @@ export default function MonitorPanel({ state, onBack, theme, onToggleTheme }: Mo
             </div>
 
             {/* Middle Tournament Details Block */}
-            <div className="hidden lg:grid grid-cols-3 gap-0.5 max-w-xl flex-1 text-slate-700 font-extrabold font-sans text-[11px] leading-tight text-center uppercase transform translate-y-2 pt-1 px-4">
+            <div className="hidden lg:grid grid-cols-3 gap-0.5 max-w-xl flex-1 text-slate-700 font-extrabold font-sans text-[11px] leading-tight text-center uppercase py-0.5 px-4 items-center">
               <div className="text-left text-[#0f2b5c] dark:text-blue-400 font-black text-xs md:text-sm tracking-wide">
                 GELANGGANG {state.gelanggang || 'A'}
               </div>

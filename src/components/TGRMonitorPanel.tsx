@@ -4,8 +4,10 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import { motion } from 'motion/react';
 import { TGRState, TGRPeserta } from '../types';
 import { Maximize2, Minimize2, Trophy, Swords, Layers, Smartphone, Tablet, Monitor, Tv, RotateCcw, Timer, Image as ImageIcon, Upload, X, Trash2, Shield, Check, Sparkles } from 'lucide-react';
+import RunningTournamentHeader from './RunningTournamentHeader';
 
 interface TGRMonitorPanelProps {
   state: TGRState;
@@ -430,8 +432,8 @@ export default function TGRMonitorPanel({ state, dispatch, onBack, theme }: TGRM
         }}
       >
 
-        {/* 2. EXACT TOP BANNER HEADER MATCHING SCREENSHOT */}
-        <header className="w-full pt-3 md:pt-5 pb-2 px-4 md:px-8 flex items-center justify-between relative z-10">
+        {/* 2. TOP BANNER HEADER WITH RUNNING TITLE */}
+        <header className="w-full pt-3 md:pt-4 pb-2 px-4 md:px-8 flex items-center justify-between relative z-10 border-b border-purple-950/50 bg-gradient-to-b from-purple-950/20 to-transparent">
           {/* Top Left Logo (Kejuaraan or IPSI Crest) */}
           <div className="flex items-center justify-start min-w-[70px]">
             {(state.logoKiri || state.logoTengah) ? (
@@ -443,11 +445,47 @@ export default function TGRMonitorPanel({ state, dispatch, onBack, theme }: TGRM
             )}
           </div>
 
-          {/* Top Center: Golden Title & White Subtitle */}
-          <div className="flex-1 text-center px-2">
-            <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black tracking-wider text-[#f59e0b] uppercase font-sans drop-shadow-[0_2px_10px_rgba(245,158,11,0.3)]">
-              {state.namaEvent?.toUpperCase() || 'KEJUARAAN NASIONAL PENCAK SILAT 2026'}
-            </h1>
+          {/* Top Center: Golden Running Title (Header Berjalan Nama Kejuaraan) & White Subtitle */}
+          <div className="flex-1 text-center px-4 min-w-0 overflow-hidden">
+            <div className="w-full max-w-4xl mx-auto overflow-hidden relative py-0.5 select-none">
+              {/* Left and right edge gradient masks */}
+              <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-8 md:w-16 bg-gradient-to-r from-[#030712] to-transparent z-10" />
+              <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 md:w-16 bg-gradient-to-l from-[#030712] to-transparent z-10" />
+
+              <motion.div
+                animate={{ x: ['0%', '-50%'] }}
+                transition={{ duration: 25, repeat: Infinity, ease: 'linear' }}
+                className="inline-flex items-center gap-10 whitespace-nowrap will-change-transform"
+              >
+                <span className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black tracking-wider text-[#f59e0b] uppercase font-sans drop-shadow-[0_2px_10px_rgba(245,158,11,0.3)]">
+                  🏆 {state.namaEvent?.toUpperCase() || 'KEJUARAAN NASIONAL PENCAK SILAT 2026'}
+                </span>
+                <span className="text-amber-500/60 font-bold">•</span>
+                <span className="text-lg sm:text-xl md:text-2xl font-black tracking-wider text-amber-200/90 uppercase font-sans">
+                  PERSATUAN PENCAK SILAT INDONESIA (IPSI)
+                </span>
+                <span className="text-amber-500/60 font-bold">•</span>
+                <span className="text-lg sm:text-xl md:text-2xl font-black tracking-wider text-cyan-300 uppercase font-sans">
+                  GELANGGANG {state.gelanggang || 'A'}
+                </span>
+                <span className="text-amber-500/60 font-bold">•</span>
+
+                {/* Seamless repetition for infinite continuous marquee */}
+                <span className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-black tracking-wider text-[#f59e0b] uppercase font-sans drop-shadow-[0_2px_10px_rgba(245,158,11,0.3)]">
+                  🏆 {state.namaEvent?.toUpperCase() || 'KEJUARAAN NASIONAL PENCAK SILAT 2026'}
+                </span>
+                <span className="text-amber-500/60 font-bold">•</span>
+                <span className="text-lg sm:text-xl md:text-2xl font-black tracking-wider text-amber-200/90 uppercase font-sans">
+                  PERSATUAN PENCAK SILAT INDONESIA (IPSI)
+                </span>
+                <span className="text-amber-500/60 font-bold">•</span>
+                <span className="text-lg sm:text-xl md:text-2xl font-black tracking-wider text-cyan-300 uppercase font-sans">
+                  GELANGGANG {state.gelanggang || 'A'}
+                </span>
+                <span className="text-amber-500/60 font-bold">•</span>
+              </motion.div>
+            </div>
+
             <div className="text-xs sm:text-sm md:text-base lg:text-lg font-extrabold tracking-widest text-white uppercase mt-0.5 md:mt-1 font-sans">
               <span>{state.partai ? `PARTAI ${state.partai}` : 'PARTAI 1'}</span>
               <span className="mx-2">•</span>
