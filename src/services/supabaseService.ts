@@ -188,12 +188,12 @@ export async function syncAllArenasToSupabase(
     }
 
     // Also push match histories to 'matches' table
-    for (const container of Object.values(arenasMap)) {
+    for (const [arenaId, container] of Object.entries(arenasMap)) {
       if (container.histories && container.histories.length > 0) {
         for (const h of container.histories) {
           await client.from('matches').upsert({
             id: h.id,
-            arena_id: h.gelanggang || 'arena_1',
+            arena_id: arenaId || 'arena_1',
             partai: h.partai,
             kelas: h.kelas,
             gender: h.gender,
@@ -206,7 +206,7 @@ export async function syncAllArenasToSupabase(
             skor_biru: h.skorAkhirBiru,
             winner: h.winner,
             status: 'Selesai',
-            tanggal: new Date(h.timestamp || Date.now()).toISOString(),
+            tanggal: h.tanggal ? new Date(h.tanggal).toISOString() : new Date().toISOString(),
             full_history: h
           }, { onConflict: 'id' });
         }
